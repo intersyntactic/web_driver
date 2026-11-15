@@ -5,9 +5,16 @@ import 'package:is_effects/is_effects.dart';
 import 'package:is_web_driver/is_web_driver.dart';
 import 'package:test/test.dart';
 
-final teams = Origin.parse('https://smba.trafficmanager.net')!;
-final hart = SignIn.parse('hart-bot')!;
-final app = BotFrameworkApp(appId: 'app', tenantId: 'tenant', secret: 's3cret');
+final api = Origin.parse('https://api.example')!;
+final bot = SignIn.parse('some-bot')!;
+final app = ClientCredentials(
+  tokenUrl: Uri.parse('https://auth.example/token'),
+  clientId: 'app',
+  secret: 's3cret',
+  scope: 'https://api.example/.default',
+  origins: {api},
+  created: 'id',
+);
 
 typedef Call = ({String method, Uri url, Map<String, String> headers});
 
@@ -16,13 +23,17 @@ void main() {
   late DateTime clock;
   late String reply;
 
+  Iterable<Call> tokenCalls() =>
+      calls.where((c) => c.url.host == 'auth.example');
+
   SigningWebDriver driver() => SigningWebDriver(
-    {hart: app},
+    {bot: app},
     now: () => clock,
     http: (method, url, headers, body) async {
       calls.add((method: method, url: url, headers: headers));
-      if (url.host == 'login.microsoftonline.com') {
+      if (url.host == 'auth.example') {
         expect(body, contains('client_secret=s3cret'));
+        expect(body, contains('grant_type=client_credentials'));
         return (
           status: 200,
           body: jsonEncode({
@@ -35,16 +46,8 @@ void main() {
     },
   );
 
-  Request post({
-    SignIn? signIn,
-    String path = '/amer/v3/conversations/c/activities',
-  }) => Request(
-    teams,
-    method: Method.post,
-    path: path,
-    signIn: signIn,
-    body: '{}',
-  );
+  Request post({SignIn? signIn, String path = '/v3/things'}) =>
+      Request(api, method: Method.post, path: path, signIn: signIn, body: '{}');
 
   setUp(() {
     calls = [];
@@ -52,60 +55,45 @@ void main() {
     reply = '{"id":"1:abc"}';
   });
 
-  test('signs with a Bot Connector token and reads the activity id', () async {
-    final out = await driver().send(post(signIn: hart));
+  test('signs with a client-credentials token and reads created', () async {
+    final out = await driver().send(post(signIn: bot));
     final sent = (out as Ran<Sent>).output;
     expect(sent.status, 201);
     expect(sent.created, '1:abc');
-    expect(calls.first.url.path, '/tenant/oauth2/v2.0/token');
-    expect(
-      calls.last.url.toString(),
-      'https://smba.trafficmanager.net/amer/v3/conversations/c/activities',
-    );
+    expect(calls.last.url.toString(), 'https://api.example/v3/things');
     expect(calls.last.headers['authorization'], 'Bearer tok1');
   });
 
   test('keeps a token until five minutes before it expires', () async {
     final d = driver();
-    await d.send(post(signIn: hart));
+    await d.send(post(signIn: bot));
     clock = clock.add(const Duration(minutes: 54));
-    await d.send(post(signIn: hart));
-    expect(
-      calls.where((c) => c.url.host == 'login.microsoftonline.com'),
-      hasLength(1),
-    );
+    await d.send(post(signIn: bot));
+    expect(tokenCalls(), hasLength(1));
     clock = clock.add(const Duration(minutes: 2));
-    await d.send(post(signIn: hart));
-    expect(
-      calls.where((c) => c.url.host == 'login.microsoftonline.com'),
-      hasLength(2),
-    );
+    await d.send(post(signIn: bot));
+    expect(tokenCalls(), hasLength(2));
   });
 
   test('concurrent sends share one token fetch', () async {
     final d = driver();
-    await Future.wait([for (var i = 0; i < 5; i++) d.send(post(signIn: hart))]);
-    expect(
-      calls.where((c) => c.url.host == 'login.microsoftonline.com'),
-      hasLength(1),
-    );
+    await Future.wait([for (var i = 0; i < 5; i++) d.send(post(signIn: bot))]);
+    expect(tokenCalls(), hasLength(1));
   });
 
   test('never shows a sign-in to a site it is not for', () async {
-    final other = Request(Origin.parse('https://example.com')!, signIn: hart);
+    final other = Request(Origin.parse('https://example.com')!, signIn: bot);
     expect(await driver().send(other), isA<Refused>());
     expect(calls, isEmpty);
   });
 
   test('refuses a path that would name another site', () async {
-    expect(
-      await driver().send(post(signIn: hart, path: '@evil.example/x')),
-      isA<Refused>(),
-    );
-    expect(
-      await driver().send(post(signIn: hart, path: '.evil.example/x')),
-      isA<Refused>(),
-    );
+    for (final path in ['@evil.example/x', '.evil.example/x']) {
+      expect(
+        await driver().send(post(signIn: bot, path: path)),
+        isA<Refused>(),
+      );
+    }
     expect(calls, isEmpty);
   });
 
@@ -125,49 +113,68 @@ void main() {
 
   test('a refusal from the destination still ran, and made nothing', () async {
     final d = SigningWebDriver(
-      {},
-      http: (_, _, _, _) async => (status: 403, body: '{"id":"x"}'),
+      {bot: app},
+      now: () => clock,
+      http: (_, url, _, _) async => url.host == 'auth.example'
+          ? (status: 200, body: '{"access_token":"t","expires_in":3600}')
+          : (status: 403, body: '{"id":"x"}'),
     );
-    final sent = ((await d.send(post())) as Ran<Sent>).output;
+    final sent = ((await d.send(post(signIn: bot))) as Ran<Sent>).output;
     expect(sent.status, 403);
     expect(sent.created, isNull);
   });
 
   test('a token the sign-in service refuses is a refusal', () async {
     final d = SigningWebDriver({
-      hart: app,
+      bot: app,
     }, http: (_, _, _, _) async => (status: 401, body: '{}'));
-    final out = await d.send(post(signIn: hart));
+    final out = await d.send(post(signIn: bot));
     expect((out as Refused).why, isNot(contains('s3cret')));
   });
 
   group('Credential', () {
+    final file = {
+      'kind': 'client-credentials',
+      'tokenUrl': 'https://auth.example/token',
+      'clientId': 'a',
+      'secret': 's3cret',
+      'origins': ['https://api.example'],
+      'created': 'id',
+    };
+
     test('loads one file per sign-in', () async {
       final dir = await Directory.systemTemp.createTemp('creds');
       addTearDown(() => dir.delete(recursive: true));
-      await File('${dir.path}/hart-bot').writeAsString(
-        jsonEncode({
-          'kind': 'bot-framework',
-          'appId': 'a',
-          'tenantId': 't',
-          'secret': 's',
-        }),
-      );
+      await File('${dir.path}/some-bot').writeAsString(jsonEncode(file));
       final loaded = await Credential.load(dir);
-      expect(loaded[hart], isA<BotFrameworkApp>());
+      expect(loaded[bot]?.origins, {api});
+      expect(loaded[bot]?.created, 'id');
     });
 
-    test('a bad file names the problem, never the secret', () {
-      expect(
-        () => Credential.parse('{"kind":"bot-framework","secret":"s3cret"}'),
-        throwsA(
-          isA<FormatException>().having(
-            (e) => e.message,
-            'message',
-            isNot(contains('s3cret')),
+    for (final (why, broken) in [
+      ('no secret', {...file}..remove('secret')),
+      ('no origins', {...file, 'origins': <String>[]}),
+      (
+        'an origin with a path',
+        {
+          ...file,
+          'origins': ['https://a.example/x'],
+        },
+      ),
+      ('a token url in the clear', {...file, 'tokenUrl': 'http://a.example'}),
+    ]) {
+      test('refuses $why, never naming the secret', () {
+        expect(
+          () => Credential.parse(jsonEncode(broken)),
+          throwsA(
+            isA<FormatException>().having(
+              (e) => e.message,
+              'message',
+              isNot(contains('s3cret')),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      });
+    }
   });
 }

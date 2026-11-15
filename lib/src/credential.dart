@@ -3,13 +3,18 @@ import 'dart:io';
 
 import 'package:is_effects/is_effects.dart';
 
-/// A sign-in's secret, and the sites it may be shown to. Each kind proves
-/// who it is in its own way and reads what its destination made in its own
-/// way.
+/// A sign-in's secret, how it is shown, and where. Each kind is a way of
+/// proving who you are, never a destination: what a destination is lives in
+/// the sign-in's file, not in this package.
 sealed class Credential {
-  const Credential();
+  Credential({required this.origins, this.created});
 
-  Set<Origin> get origins;
+  /// The only sites this sign-in is ever shown to.
+  final Set<Origin> origins;
+
+  /// The field of a 2xx reply's JSON object that names what the destination
+  /// made, such as `id`; null when it makes nothing worth recording.
+  final String? created;
 
   /// [raw], a sign-in's credential file, or a [FormatException] naming what
   /// is wrong with it but never its secret.
@@ -20,15 +25,42 @@ sealed class Credential {
     } on FormatException {
       throw const FormatException('credential is not JSON');
     }
+    if (json is! Map<String, Object?>) {
+      throw const FormatException('credential is not a JSON object');
+    }
+    final origins = switch (json['origins']) {
+      final List<Object?> list when list.isNotEmpty => {
+        for (final o in list)
+          (o is String ? Origin.parse(o) : null) ??
+              (throw FormatException('not an origin: $o')),
+      },
+      _ => throw const FormatException('credential names no origins'),
+    };
+    final created = switch (json['created']) {
+      null => null,
+      final String field when field.isNotEmpty => field,
+      _ => throw const FormatException('created is not a field name'),
+    };
     return switch (json) {
       {
-        'kind': 'bot-framework',
-        'appId': final String appId,
-        'tenantId': final String tenantId,
+        'kind': 'client-credentials',
+        'tokenUrl': final String tokenUrl,
+        'clientId': final String clientId,
         'secret': final String secret,
       }
-          when appId.isNotEmpty && tenantId.isNotEmpty && secret.isNotEmpty =>
-        BotFrameworkApp(appId: appId, tenantId: tenantId, secret: secret),
+          when clientId.isNotEmpty && secret.isNotEmpty =>
+        ClientCredentials(
+          tokenUrl: _https(tokenUrl),
+          clientId: clientId,
+          secret: secret,
+          scope: switch (json['scope']) {
+            null => null,
+            final String scope => scope,
+            _ => throw const FormatException('scope is not text'),
+          },
+          origins: origins,
+          created: created,
+        ),
       {'kind': final String kind} => throw FormatException(
         'not a complete $kind credential',
       ),
@@ -54,41 +86,40 @@ sealed class Credential {
     }
     return loaded;
   }
+
+  /// The secret travels to it, so never in the clear.
+  static Uri _https(String raw) {
+    final uri = Uri.tryParse(raw);
+    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
+      throw FormatException('not an https url: $raw');
+    }
+    return uri;
+  }
 }
 
-/// A Teams bot's app registration. It signs with a Bot Connector token from
-/// Microsoft's sign-in service, and what it made is the activity whose id
-/// comes back in the reply.
-final class BotFrameworkApp extends Credential {
-  BotFrameworkApp({
-    required this.appId,
-    required this.tenantId,
+/// OAuth 2's client-credentials grant: trades a client id and secret at
+/// [tokenUrl] for a bearer token, kept until shortly before it expires.
+final class ClientCredentials extends Credential {
+  ClientCredentials({
+    required this.tokenUrl,
+    required this.clientId,
     required this._secret,
+    this.scope,
+    required super.origins,
+    super.created,
   });
 
-  final String appId;
-
-  /// A single-tenant bot's token comes from its own tenant.
-  final String tenantId;
-
+  final Uri tokenUrl;
+  final String clientId;
   final String _secret;
-
-  @override
-  Set<Origin> get origins => {Origin.parse('https://smba.trafficmanager.net')!};
-
-  static const scope = 'https://api.botframework.com/.default';
-
-  Uri get tokenUrl => Uri.https(
-    'login.microsoftonline.com',
-    '/${Uri.encodeComponent(tenantId)}/oauth2/v2.0/token',
-  );
+  final String? scope;
 
   String get tokenForm => Uri(
     queryParameters: {
       'grant_type': 'client_credentials',
-      'client_id': appId,
+      'client_id': clientId,
       'client_secret': _secret,
-      'scope': scope,
+      'scope': ?scope,
     },
   ).query;
 }

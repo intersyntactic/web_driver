@@ -78,7 +78,7 @@ final class SigningWebDriver implements WebDriver {
     return Ran(
       Sent(
         status: r.status,
-        created: ok && credential != null ? _created(credential, r.body) : null,
+        created: ok ? _created(credential?.created, r.body) : null,
       ),
     );
   }
@@ -88,14 +88,16 @@ final class SigningWebDriver implements WebDriver {
     Credential credential,
   ) async {
     switch (credential) {
-      case BotFrameworkApp():
+      case ClientCredentials():
         final cached = _tokens[signIn];
         if (cached != null) {
           final token = await cached;
           if (_now().isBefore(token.until)) return Ran('Bearer ${token.value}');
           if (identical(_tokens[signIn], cached)) _tokens.remove(signIn);
         }
-        final fetching = _tokens[signIn] ??= _botFrameworkToken(credential);
+        final fetching = _tokens[signIn] ??= _clientCredentialsToken(
+          credential,
+        );
         try {
           return Ran('Bearer ${(await fetching).value}');
         } on _TokenRefused catch (e) {
@@ -107,7 +109,7 @@ final class SigningWebDriver implements WebDriver {
 
   /// Fetched again five minutes before it would expire, so a call never
   /// carries one that lapses in flight.
-  Future<_Token> _botFrameworkToken(BotFrameworkApp app) async {
+  Future<_Token> _clientCredentialsToken(ClientCredentials app) async {
     final HttpResult r;
     try {
       r = await _http('POST', app.tokenUrl, {
@@ -129,13 +131,12 @@ final class SigningWebDriver implements WebDriver {
     };
   }
 
-  static String? _created(Credential credential, String body) =>
-      switch (credential) {
-        BotFrameworkApp() => switch (_json(body)) {
-          {'id': final String id} when id.isNotEmpty => id,
-          _ => null,
-        },
-      };
+  static String? _created(String? field, String body) {
+    if (field == null) return null;
+    final json = _json(body);
+    final id = json is Map<String, Object?> ? json[field] : null;
+    return id is String && id.isNotEmpty ? id : null;
+  }
 
   /// [Request.path] appended to its origin, or null when the result names
   /// another site: `@evil.example` after `https://a.example` is a login to
