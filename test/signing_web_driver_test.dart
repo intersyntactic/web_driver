@@ -124,6 +124,54 @@ void main() {
     expect(sent.created, isNull);
   });
 
+  test(
+    'logs why the destination refused, which the outcome cannot carry',
+    () async {
+      final log = <String>[];
+      final d = SigningWebDriver(
+        {bot: app},
+        now: () => clock,
+        log: log.add,
+        http: (_, url, _, _) async => url.host == 'auth.example'
+            ? (status: 200, body: '{"access_token":"t0ken","expires_in":3600}')
+            : (status: 404, body: '{"error":"ConversationNotFound"}'),
+      );
+      await d.send(post(signIn: bot));
+      expect(log.single, contains('404'));
+      expect(log.single, contains('ConversationNotFound'));
+      expect(log.single, isNot(contains('t0ken')));
+    },
+  );
+
+  test('logs why a token was refused, never the secret', () async {
+    final log = <String>[];
+    final d = SigningWebDriver(
+      {bot: app},
+      log: log.add,
+      http: (_, _, _, _) async => (
+        status: 401,
+        body: '{"error":"invalid_client","error_codes":[7000215]}',
+      ),
+    );
+    await d.send(post(signIn: bot));
+    expect(log.single, contains('7000215'));
+    expect(log.single, isNot(contains('s3cret')));
+  });
+
+  test('logs nothing when a send succeeds', () async {
+    final log = <String>[];
+    final d = SigningWebDriver(
+      {bot: app},
+      now: () => clock,
+      log: log.add,
+      http: (_, url, _, _) async => url.host == 'auth.example'
+          ? (status: 200, body: '{"access_token":"t0ken","expires_in":3600}')
+          : (status: 201, body: '{"id":"1"}'),
+    );
+    await d.send(post(signIn: bot));
+    expect(log, isEmpty);
+  });
+
   test('a token the sign-in service refuses is a refusal', () async {
     final d = SigningWebDriver({
       bot: app,
