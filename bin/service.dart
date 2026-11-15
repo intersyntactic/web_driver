@@ -1,6 +1,6 @@
 /// Runs the web driver as a service (see `package:is_web_driver/service.dart`):
 ///
-///     WEB_DRIVER_SOCKET=/run/web-driver/web-driver.sock \
+///     WEB_DRIVER_SOCKET=/run/intersyntactic-web-driver/web-driver.sock \
 ///       WEB_DRIVER_CALLER=airlock \
 ///       CREDENTIALS_DIRECTORY=... \
 ///       dart run is_web_driver:service

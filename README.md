@@ -71,7 +71,7 @@ It runs as its own OS user, holds only its own secrets, and answers only
 the airlock's user. So the driver runs as a service:
 
 ```
-WEB_DRIVER_SOCKET=/run/web-driver/web-driver.sock \
+WEB_DRIVER_SOCKET=/run/intersyntactic-web-driver/web-driver.sock \
   WEB_DRIVER_CALLER=<the airlock's user> \
   dart run is_web_driver:service      # CREDENTIALS_DIRECTORY from LoadCredential=
 ```
