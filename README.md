@@ -28,6 +28,14 @@ Teams, Slack or GitHub is a file, not a change to this package.
 4. **It reads what the destination made.** That becomes `Sent.created`: the
    field the sign-in names, taken from a 2xx JSON reply.
 
+5. **It says why a destination refused.** A failure moves a piece of
+   information of its own: why. A `400`'s body names the problem, and a
+   refused token's names the cause (`AADSTS7000215` is a wrong secret).
+   `Sent` has no place for it, so the driver logs the status and body for
+   whoever runs it. The service logs to stdout, which is the journal on the
+   box. A successful reply is never logged, and neither is a token
+   service's 200, since that body is the token.
+
 `Ran(Sent)` means the request left the home and got a reply, whatever its
 status. `Refused` means nothing reached the destination: an unknown sign-in,
 a foreign origin or path, a token the sign-in service wouldn't issue, or a

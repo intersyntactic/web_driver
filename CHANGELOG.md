@@ -7,6 +7,10 @@
   Each driver is a wall of its own.
 - `SocketWebDriver` in `package:is_web_driver/service.dart`: the airlock's
   side, a `WebDriver` holding no secret.
+- A refusal whose reason only its body gives, such as a non-2xx reply or a
+  token the sign-in service would not issue, is logged with that body for
+  whoever runs the driver (`SigningWebDriver(log:)`; the service logs to
+  stdout). The outcome and the record are unchanged.
 
 ## 0.1.0
 

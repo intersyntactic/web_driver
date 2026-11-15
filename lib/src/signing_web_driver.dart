@@ -24,13 +24,26 @@ final class SigningWebDriver implements WebDriver {
     Map<SignIn, Credential> signIns, {
     HttpCall? http,
     DateTime Function()? now,
+    void Function(String line)? log,
   }) : _signIns = Map.unmodifiable(signIns),
        _http = http ?? httpCall,
-       _now = now ?? DateTime.now;
+       _now = now ?? DateTime.now,
+       _log = log ?? _silent;
 
   final Map<SignIn, Credential> _signIns;
   final HttpCall _http;
   final DateTime Function() _now;
+
+  /// Where a refusal's reason goes when only its body says it: a non-2xx
+  /// reply, or a token the sign-in service would not issue. For whoever runs
+  /// the driver, not the record.
+  final void Function(String line) _log;
+
+  static void _silent(String _) {}
+
+  /// Enough of a body to say why; an error page can run to megabytes.
+  static String _clip(String body) =>
+      body.length <= 2000 ? body : '${body.substring(0, 2000)}…';
 
   /// Shared by concurrent sends, so a burst asks for one token, not many.
   final _tokens = <SignIn, Future<_Token>>{};
@@ -75,6 +88,12 @@ final class SigningWebDriver implements WebDriver {
       return Refused('${request.origin}: timed out');
     }
     final ok = r.status >= 200 && r.status <= 299;
+    if (!ok) {
+      _log(
+        '${request.method.name.toUpperCase()} $url '
+        '${signIn == null ? '' : 'as $signIn '}${r.status}: ${_clip(r.body)}',
+      );
+    }
     return Ran(
       Sent(
         status: r.status,
@@ -120,7 +139,12 @@ final class SigningWebDriver implements WebDriver {
     } on TimeoutException {
       throw _TokenRefused('token: timed out');
     }
-    if (r.status != 200) throw _TokenRefused('token: ${r.status}');
+    if (r.status != 200) {
+      // A refusal's body is the service's error, never the token: a 200's
+      // body is not logged, since that is where the token is.
+      _log('token from ${app.tokenUrl.host} ${r.status}: ${_clip(r.body)}');
+      throw _TokenRefused('token: ${r.status}');
+    }
     return switch (_json(r.body)) {
       {'access_token': final String value, 'expires_in': final int seconds} =>
         _Token(

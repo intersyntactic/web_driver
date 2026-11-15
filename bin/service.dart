@@ -39,7 +39,7 @@ Future<void> main() async {
   final WebDriverService service;
   try {
     service = await WebDriverService.start(
-      SigningWebDriver(signIns),
+      SigningWebDriver(signIns, log: stdout.writeln),
       uid,
       File(socket),
     );
