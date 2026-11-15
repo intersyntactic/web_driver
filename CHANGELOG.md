@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0
+
+- The driver as its own service (`dart run is_web_driver:service`), which
+  answers only the airlock's user, as the kernel reports it for the socket.
+  Each driver is a wall of its own.
+- `SocketWebDriver` in `package:is_web_driver/service.dart`: the airlock's
+  side, a `WebDriver` holding no secret.
+
 ## 0.1.0
 
 - First release: `SigningWebDriver`, the `WebDriver` from `is_effects` that

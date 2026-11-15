@@ -63,8 +63,33 @@ id, which a card press names later:
 }
 ```
 
-```dart
-final driver = SigningWebDriver(
-  await Credential.load(Directory(Platform.environment['CREDENTIALS_DIRECTORY']!)),
-);
+## Running as its own service
+
+Each driver is a wall of its own
+([RULINGS](https://github.com/enspyrco/intersyntactic/blob/main/RULINGS.md)).
+It runs as its own OS user, holds only its own secrets, and answers only
+the airlock's user. So the driver runs as a service:
+
 ```
+WEB_DRIVER_SOCKET=/run/intersyntactic-web-driver/web-driver.sock \
+  WEB_DRIVER_CALLER=<the airlock's user> \
+  dart run is_web_driver:service      # CREDENTIALS_DIRECTORY from LoadCredential=
+```
+
+The service reads who is calling from the socket, as the kernel reports it
+(`SO_PEERCRED`), the same way is_journal's writer knows its senders. It
+answers no one else: a connection from any other user is closed unanswered,
+and nothing is sent. A caller sends one request per connection and closes
+its side. The service answers one line and closes:
+
+```
+→ {"origin":"https://…","method":"post","path":"/…","signIn":"hart-bot","headers":{…},"body":"…"}
+← {"ran":{"status":201,"created":"…"}}      or      {"refused":"why"}
+```
+
+The answer mirrors `Outcome<Sent>`: a send that got a 4xx reply still
+`ran`. The airlock side is `SocketWebDriver` from
+`package:is_web_driver/service.dart`. It is an ordinary `WebDriver` that
+holds no secret, so a journey path is given it like any other driver. Each
+sign-in is its own file, so a sign-in that needs a wall of its own can run
+as a second instance of this service with only that file.
