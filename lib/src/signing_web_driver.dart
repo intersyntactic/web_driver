@@ -1,0 +1,195 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:is_effects/is_effects.dart';
+
+import 'credential.dart';
+
+typedef HttpResult = ({int status, String body});
+
+/// Makes one HTTP call. Injected, so the driver is testable without a
+/// network.
+typedef HttpCall = Future<HttpResult> Function(
+  String method,
+  Uri url,
+  Map<String, String> headers,
+  String body,
+);
+
+/// A [WebDriver] that signs each request with the secret of the sign-in it
+/// names, and only for the sites that sign-in is for.
+final class SigningWebDriver implements WebDriver {
+  SigningWebDriver(
+    Map<SignIn, Credential> signIns, {
+    HttpCall? http,
+    DateTime Function()? now,
+  }) : _signIns = Map.unmodifiable(signIns),
+       _http = http ?? httpCall,
+       _now = now ?? DateTime.now;
+
+  final Map<SignIn, Credential> _signIns;
+  final HttpCall _http;
+  final DateTime Function() _now;
+
+  /// Shared by concurrent sends, so a burst asks for one token, not many.
+  final _tokens = <SignIn, Future<_Token>>{};
+
+  @override
+  Future<Outcome<Sent>> send(Request request) async {
+    final url = _url(request);
+    if (url == null) return Refused('path ${request.path} leaves its origin');
+
+    final signIn = request.signIn;
+    final credential = signIn == null ? null : _signIns[signIn];
+    if (signIn != null && credential == null) {
+      return Refused('no sign-in $signIn');
+    }
+    // The airlock decides who may go where by name alone; only here is it
+    // known that a secret would ride along to a site that never issued it.
+    if (credential != null && !credential.origins.contains(request.origin)) {
+      return Refused('$signIn is not for ${request.origin}');
+    }
+
+    final headers = {...request.headers};
+    if (credential != null) {
+      switch (await _authorization(signIn!, credential)) {
+        case Ran(output: final value):
+          headers['authorization'] = value;
+        case final Refused refused:
+          return refused;
+      }
+    }
+
+    final HttpResult r;
+    try {
+      r = await _http(
+        request.method.name.toUpperCase(),
+        url,
+        headers,
+        request.body ?? '',
+      );
+    } on IOException catch (e) {
+      return Refused('${request.origin}: $e');
+    } on TimeoutException {
+      return Refused('${request.origin}: timed out');
+    }
+    final ok = r.status >= 200 && r.status <= 299;
+    return Ran(
+      Sent(
+        status: r.status,
+        created: ok && credential != null ? _created(credential, r.body) : null,
+      ),
+    );
+  }
+
+  Future<Outcome<String>> _authorization(
+    SignIn signIn,
+    Credential credential,
+  ) async {
+    switch (credential) {
+      case BotFrameworkApp():
+        final cached = _tokens[signIn];
+        if (cached != null) {
+          final token = await cached;
+          if (_now().isBefore(token.until)) return Ran('Bearer ${token.value}');
+          if (identical(_tokens[signIn], cached)) _tokens.remove(signIn);
+        }
+        final fetching = _tokens[signIn] ??= _botFrameworkToken(credential);
+        try {
+          return Ran('Bearer ${(await fetching).value}');
+        } on _TokenRefused catch (e) {
+          if (identical(_tokens[signIn], fetching)) _tokens.remove(signIn);
+          return Refused('$signIn: $e');
+        }
+    }
+  }
+
+  /// Fetched again five minutes before it would expire, so a call never
+  /// carries one that lapses in flight.
+  Future<_Token> _botFrameworkToken(BotFrameworkApp app) async {
+    final HttpResult r;
+    try {
+      r = await _http('POST', app.tokenUrl, {
+        'content-type': 'application/x-www-form-urlencoded',
+      }, app.tokenForm);
+    } on IOException catch (e) {
+      throw _TokenRefused('token: $e');
+    } on TimeoutException {
+      throw _TokenRefused('token: timed out');
+    }
+    if (r.status != 200) throw _TokenRefused('token: ${r.status}');
+    return switch (_json(r.body)) {
+      {'access_token': final String value, 'expires_in': final int seconds} =>
+        _Token(
+          value,
+          _now().add(Duration(seconds: seconds) - const Duration(minutes: 5)),
+        ),
+      _ => throw _TokenRefused('token: unreadable reply'),
+    };
+  }
+
+  static String? _created(Credential credential, String body) =>
+      switch (credential) {
+        BotFrameworkApp() => switch (_json(body)) {
+          {'id': final String id} when id.isNotEmpty => id,
+          _ => null,
+        },
+      };
+
+  /// [Request.path] appended to its origin, or null when the result names
+  /// another site: `@evil.example` after `https://a.example` is a login to
+  /// `evil.example`.
+  static Uri? _url(Request request) {
+    final path = request.path;
+    if (path.isNotEmpty && !path.startsWith('/')) return null;
+    final url = Uri.tryParse('${request.origin}$path');
+    if (url == null || Origin.parse(url.origin) != request.origin) return null;
+    return url;
+  }
+
+  static Object? _json(String body) {
+    try {
+      return jsonDecode(body);
+    } on FormatException {
+      return null;
+    }
+  }
+}
+
+final class _Token {
+  _Token(this.value, this.until);
+  final String value;
+  final DateTime until;
+}
+
+final class _TokenRefused implements Exception {
+  _TokenRefused(this.why);
+  final String why;
+
+  @override
+  String toString() => why;
+}
+
+/// [HttpCall] over `dart:io`, with a ten-second limit on each step.
+Future<HttpResult> httpCall(
+  String method,
+  Uri url,
+  Map<String, String> headers,
+  String body,
+) async {
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+  try {
+    final req = await client.openUrl(method, url);
+    headers.forEach(req.headers.set);
+    req.add(utf8.encode(body));
+    final res = await req.close().timeout(const Duration(seconds: 10));
+    final text = await res
+        .transform(utf8.decoder)
+        .join()
+        .timeout(const Duration(seconds: 10));
+    return (status: res.statusCode, body: text);
+  } finally {
+    client.close();
+  }
+}
