@@ -97,8 +97,10 @@ final class SigningWebDriver implements WebDriver {
     return Ran(
       Sent(
         status: r.status,
-        created: ok ? _created(credential?.created, r.body) : null,
-        refusedBecause: ok || r.body.isEmpty ? null : _clip(r.body),
+        created: ok ? credential?.created?.read(r.body) : null,
+        refusedBecause: ok
+            ? null
+            : _word(credential?.refusedBecause?.read(r.body)),
       ),
     );
   }
@@ -144,7 +146,10 @@ final class SigningWebDriver implements WebDriver {
       // A refusal's body is the service's error, never the token: a 200's
       // body is not logged, since that is where the token is.
       _log('token from ${app.tokenUrl.host} ${r.status}: ${_clip(r.body)}');
-      throw _TokenRefused('token: ${r.status}: ${_clip(r.body)}');
+      final error = _word(_oauthError.read(r.body));
+      throw _TokenRefused(
+        'token: ${r.status}${error == null ? '' : ' $error'}',
+      );
     }
     return switch (_json(r.body)) {
       {'access_token': final String value, 'expires_in': final int seconds} =>
@@ -156,12 +161,17 @@ final class SigningWebDriver implements WebDriver {
     };
   }
 
-  static String? _created(String? field, String body) {
-    if (field == null) return null;
-    final json = _json(body);
-    final id = json is Map<String, Object?> ? json[field] : null;
-    return id is String && id.isNotEmpty ? id : null;
-  }
+  /// OAuth 2's error code (RFC 6749, 5.2), such as `invalid_client`: the
+  /// protocol's own, so every token service gives it.
+  static final _oauthError = ReplyField.parse('error')!;
+
+  /// A reason short enough to keep for good; a field that holds more than a
+  /// word or two was named by mistake.
+  static String? _word(String? reason) => reason == null
+      ? null
+      : reason.length <= 200
+      ? reason
+      : '${reason.substring(0, 200)}…';
 
   /// [Request.path] appended to its origin, or null when the result names
   /// another site: `@evil.example` after `https://a.example` is a login to

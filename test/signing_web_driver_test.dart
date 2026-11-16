@@ -13,7 +13,8 @@ final app = ClientCredentials(
   secret: 's3cret',
   scope: 'https://api.example/.default',
   origins: {api},
-  created: 'id',
+  created: ReplyField.parse('id'),
+  refusedBecause: ReplyField.parse('error.code'),
 );
 
 typedef Call = ({String method, Uri url, Map<String, String> headers});
@@ -134,10 +135,17 @@ void main() {
         log: log.add,
         http: (_, url, _, _) async => url.host == 'auth.example'
             ? (status: 200, body: '{"access_token":"t0ken","expires_in":3600}')
-            : (status: 404, body: '{"error":"ConversationNotFound"}'),
+            : (
+                status: 404,
+                body:
+                    '{"error":{"code":"ConversationNotFound",'
+                    '"message":"Conversation 19:abc@thread not found"}}',
+              ),
       );
       final sent = ((await d.send(post(signIn: bot))) as Ran<Sent>).output;
-      expect(sent.refusedBecause, '{"error":"ConversationNotFound"}');
+      // The word the sign-in names, for the record; the rest only logged.
+      expect(sent.refusedBecause, 'ConversationNotFound');
+      expect(log.single, contains('19:abc@thread'));
       expect(sent.created, isNull);
       expect(log.single, contains('404'));
       expect(log.single, contains('ConversationNotFound'));
@@ -156,7 +164,9 @@ void main() {
       ),
     );
     final out = await d.send(post(signIn: bot));
-    expect((out as Refused).why, contains('7000215'));
+    // OAuth's own error code for the record; Microsoft's number only logged.
+    expect((out as Refused).why, contains('invalid_client'));
+    expect(out.why, isNot(contains('7000215')));
     expect(out.why, isNot(contains('s3cret')));
     expect(log.single, contains('7000215'));
     expect(log.single, isNot(contains('s3cret')));
@@ -192,6 +202,7 @@ void main() {
       'secret': 's3cret',
       'origins': ['https://api.example'],
       'created': 'id',
+      'refusedBecause': 'error.code',
     };
 
     test('loads one file per sign-in', () async {
@@ -200,7 +211,11 @@ void main() {
       await File('${dir.path}/some-bot').writeAsString(jsonEncode(file));
       final loaded = await Credential.load(dir);
       expect(loaded[bot]?.origins, {api});
-      expect(loaded[bot]?.created, 'id');
+      expect(loaded[bot]?.created?.read('{"id":"1"}'), '1');
+      expect(
+        loaded[bot]?.refusedBecause?.read('{"error":{"code":"BadArgument"}}'),
+        'BadArgument',
+      );
     });
 
     for (final (why, broken) in [
@@ -214,6 +229,7 @@ void main() {
         },
       ),
       ('a token url in the clear', {...file, 'tokenUrl': 'http://a.example'}),
+      ('a field path with an empty key', {...file, 'refusedBecause': 'a..b'}),
     ]) {
       test('refuses $why, never naming the secret', () {
         expect(
