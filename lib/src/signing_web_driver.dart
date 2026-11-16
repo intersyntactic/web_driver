@@ -98,6 +98,7 @@ final class SigningWebDriver implements WebDriver {
       Sent(
         status: r.status,
         created: ok ? _created(credential?.created, r.body) : null,
+        refusedBecause: ok || r.body.isEmpty ? null : _clip(r.body),
       ),
     );
   }
@@ -143,7 +144,7 @@ final class SigningWebDriver implements WebDriver {
       // A refusal's body is the service's error, never the token: a 200's
       // body is not logged, since that is where the token is.
       _log('token from ${app.tokenUrl.host} ${r.status}: ${_clip(r.body)}');
-      throw _TokenRefused('token: ${r.status}');
+      throw _TokenRefused('token: ${r.status}: ${_clip(r.body)}');
     }
     return switch (_json(r.body)) {
       {'access_token': final String value, 'expires_in': final int seconds} =>

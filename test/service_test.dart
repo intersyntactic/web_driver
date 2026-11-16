@@ -12,6 +12,9 @@ final class Echo implements WebDriver {
   @override
   Future<Outcome<Sent>> send(Request request) async {
     sent.add(request);
+    if (request.path == '/refuse') {
+      return Ran(Sent(status: 400, refusedBecause: 'BadArgument'));
+    }
     return Ran(Sent(status: 201, created: request.path));
   }
 }
@@ -59,12 +62,38 @@ void main() {
     final sent = (out as Ran<Sent>).output;
     expect(sent.status, 201);
     expect(sent.created, '/v3/things');
+    expect(sent.refusedBecause, isNull);
     final r = driver.sent.single;
     expect(r.origin, api);
     expect(r.method, Method.post);
     expect(r.signIn?.name, 'some-bot');
     expect(r.headers, {'content-type': 'application/json'});
     expect(r.body, '{"a":1}');
+  });
+
+  test('carries why a destination refused back across the socket', () async {
+    final service = await WebDriverService.start(driver, me, socket);
+    addTearDown(service.close);
+    final out = await SocketWebDriver(socket)
+        .send(Request(api, path: '/refuse'));
+    final sent = (out as Ran<Sent>).output;
+    expect(sent.status, 400);
+    expect(sent.refusedBecause, 'BadArgument');
+  });
+
+  test('reads an answer from a service that sends no refusedBecause', () async {
+    final server = await ServerSocket.bind(
+      InternetAddress(socket.path, type: InternetAddressType.unix),
+      0,
+    );
+    addTearDown(server.close);
+    server.listen((s) async {
+      await s.drain<void>();
+      s.write('{"ran":{"status":201,"created":"1:abc"}}\n');
+      await s.close();
+    });
+    final out = await SocketWebDriver(socket).send(Request(api));
+    expect((out as Ran<Sent>).output.created, '1:abc');
   });
 
   test('answers no one but its caller, and carries out nothing', () async {

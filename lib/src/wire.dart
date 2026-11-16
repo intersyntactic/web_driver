@@ -73,8 +73,12 @@ const _credentialHeaders = {
 };
 
 String encodeOutcome(Outcome<Sent> o) => jsonEncode(switch (o) {
-  Ran(output: Sent(:final status, :final created)) => {
-    'ran': {'status': status, 'created': created},
+  Ran(output: Sent(:final status, :final created, :final refusedBecause)) => {
+    'ran': {
+      'status': status,
+      'created': created,
+      'refusedBecause': refusedBecause,
+    },
   },
   Refused(:final why) => {'refused': why},
 });
@@ -87,8 +91,21 @@ Outcome<Sent> decodeOutcome(String raw) {
     return Refused('web driver: unreadable answer');
   }
   return switch (json) {
-    {'ran': {'status': final int status, 'created': final String? created}} =>
-      Ran(Sent(status: status, created: created)),
+    // A service from before 0.2.0 sends no refusedBecause, and the airlock
+    // and the driver are deployed apart.
+    {
+      'ran':
+          {'status': final int status, 'created': final String? created} &&
+          final Map<String, Object?> ran,
+    }
+        when (ran['refusedBecause'] is String?) =>
+      Ran(
+        Sent(
+          status: status,
+          created: created,
+          refusedBecause: ran['refusedBecause'] as String?,
+        ),
+      ),
     {'refused': final String why} => Refused(why),
     _ => Refused('web driver: unreadable answer'),
   };

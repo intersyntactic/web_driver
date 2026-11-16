@@ -125,7 +125,7 @@ void main() {
   });
 
   test(
-    'logs why the destination refused, which the outcome cannot carry',
+    'says why the destination refused, in the outcome and the log',
     () async {
       final log = <String>[];
       final d = SigningWebDriver(
@@ -136,7 +136,9 @@ void main() {
             ? (status: 200, body: '{"access_token":"t0ken","expires_in":3600}')
             : (status: 404, body: '{"error":"ConversationNotFound"}'),
       );
-      await d.send(post(signIn: bot));
+      final sent = ((await d.send(post(signIn: bot))) as Ran<Sent>).output;
+      expect(sent.refusedBecause, '{"error":"ConversationNotFound"}');
+      expect(sent.created, isNull);
       expect(log.single, contains('404'));
       expect(log.single, contains('ConversationNotFound'));
       expect(log.single, isNot(contains('t0ken')));
@@ -153,7 +155,9 @@ void main() {
         body: '{"error":"invalid_client","error_codes":[7000215]}',
       ),
     );
-    await d.send(post(signIn: bot));
+    final out = await d.send(post(signIn: bot));
+    expect((out as Refused).why, contains('7000215'));
+    expect(out.why, isNot(contains('s3cret')));
     expect(log.single, contains('7000215'));
     expect(log.single, isNot(contains('s3cret')));
   });
