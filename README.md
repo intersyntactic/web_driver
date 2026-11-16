@@ -31,12 +31,15 @@ Teams, Slack or GitHub is a file, not a change to this package.
 5. **It says why a destination refused.** A failure moves a piece of
    information of its own: why. A `400`'s body names the problem, and a
    refused token's names the cause (`AADSTS7000215` is a wrong secret).
-   A refused send's reason goes in `Sent.refusedBecause`, and a refused
-   token's goes in its `Refused` reason, so the airlock and the record can
-   say why. The driver also logs both for whoever runs it. The service logs
-   to stdout, which is the journal on the box. Bodies are clipped to 2,000
-   characters. A successful reply is never logged, and neither is a token
-   service's 200, since that body is the token.
+   The record keeps what it's given for good, so it gets **a word, not the
+   body**. `Sent.refusedBecause` is the one field the sign-in names as its
+   reason, such as `error.code` → `ConversationNotFound`. A refused token's
+   `Refused` reason carries OAuth's own `error` code, such as
+   `invalid_client`. The whole body goes only to the driver's log, for
+   whoever runs it. The service logs to stdout, which is the journal on the
+   box, and bodies are clipped to 2,000 characters. A successful reply is
+   never logged, and neither is a token service's 200, since that body is
+   the token.
 
 `Ran(Sent)` means the request left the home and got a reply, whatever its
 status. `Refused` means nothing reached the destination: an unknown sign-in,
@@ -56,10 +59,13 @@ in that directory. This package never reads the environment.
 | `client-credentials` | an OAuth 2 bearer token from `tokenUrl` (https only) | `tokenUrl`, `clientId`, `secret`, optional `scope` |
 
 Every kind also takes `origins`, the only sites the sign-in is ever shown
-to, and an optional `created`, the reply field naming what was made.
+to, and two optional reply fields, each a path of keys such as `error.code`:
+`created`, naming what a 2xx reply made, and `refusedBecause`, naming why a
+non-2xx reply refused.
 
 For example, `hart-bot` is a Teams bot. Its `created` is the new activity's
-id, which a card press names later:
+id, which a card press names later. Its `refusedBecause` is the Bot
+Framework error's code:
 
 ```json
 {
@@ -69,7 +75,8 @@ id, which a card press names later:
   "secret": "<app secret>",
   "scope": "https://api.botframework.com/.default",
   "origins": ["https://smba.trafficmanager.net"],
-  "created": "id"
+  "created": "id",
+  "refusedBecause": "error.code"
 }
 ```
 

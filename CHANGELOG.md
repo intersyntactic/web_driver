@@ -7,10 +7,14 @@
   Each driver is a wall of its own.
 - `SocketWebDriver` in `package:is_web_driver/service.dart`: the airlock's
   side, a `WebDriver` holding no secret.
-- Why a destination refused reaches the airlock: a non-2xx reply's body
-  goes in `Sent.refusedBecause` (is_effects 0.1.1), and a refused token's
-  goes in the `Refused` reason. Both are also logged for whoever runs the
-  driver (`SigningWebDriver(log:)`; the service logs to stdout).
+- Why a destination refused reaches the airlock as a word, not a body, since
+  the record keeps it for good. `Sent.refusedBecause` (is_effects 0.1.1) is
+  the reply field the sign-in's file names in `refusedBecause`, such as
+  `error.code`. A refused token's `Refused` reason carries OAuth's `error`
+  code. The whole body is only logged, for whoever runs the driver
+  (`SigningWebDriver(log:)`; the service logs to stdout).
+- `created` and `refusedBecause` are `ReplyField`s, paths of keys into a JSON
+  reply, checked when the sign-in's file loads.
 - `SocketWebDriver` still reads an answer from a service that sends no
   `refusedBecause`, since the airlock and the driver are deployed apart.
 

@@ -7,14 +7,19 @@ import 'package:is_effects/is_effects.dart';
 /// proving who you are, never a destination: what a destination is lives in
 /// the sign-in's file, not in this package.
 sealed class Credential {
-  Credential({required this.origins, this.created});
+  Credential({required this.origins, this.created, this.refusedBecause});
 
   /// The only sites this sign-in is ever shown to.
   final Set<Origin> origins;
 
-  /// The field of a 2xx reply's JSON object that names what the destination
-  /// made, such as `id`; null when it makes nothing worth recording.
-  final String? created;
+  /// Where a 2xx reply names what the destination made, such as `id`; null
+  /// when it makes nothing worth recording.
+  final ReplyField? created;
+
+  /// Where a non-2xx reply names why, in a word, such as `error.code`; null
+  /// when it doesn't. The rest of the body goes only to the driver's log,
+  /// since the record keeps what it is given for good.
+  final ReplyField? refusedBecause;
 
   /// [raw], a sign-in's credential file, or a [FormatException] naming what
   /// is wrong with it but never its secret.
@@ -36,11 +41,8 @@ sealed class Credential {
       },
       _ => throw const FormatException('credential names no origins'),
     };
-    final created = switch (json['created']) {
-      null => null,
-      final String field when field.isNotEmpty => field,
-      _ => throw const FormatException('created is not a field name'),
-    };
+    final created = ReplyField._read(json, 'created');
+    final refusedBecause = ReplyField._read(json, 'refusedBecause');
     return switch (json) {
       {
         'kind': 'client-credentials',
@@ -60,6 +62,7 @@ sealed class Credential {
           },
           origins: origins,
           created: created,
+          refusedBecause: refusedBecause,
         ),
       {'kind': final String kind} => throw FormatException(
         'not a complete $kind credential',
@@ -107,6 +110,7 @@ final class ClientCredentials extends Credential {
     this.scope,
     required super.origins,
     super.created,
+    super.refusedBecause,
   });
 
   final Uri tokenUrl;
@@ -122,4 +126,45 @@ final class ClientCredentials extends Credential {
       'scope': ?scope,
     },
   ).query;
+}
+
+/// A text field in a JSON reply, by its path of object keys: `id`, or
+/// `error.code` for `{"error": {"code": "…"}}`.
+final class ReplyField {
+  ReplyField._(this._keys);
+
+  final List<String> _keys;
+
+  /// [raw] as a path of keys separated by `.`, or null when a key is empty.
+  static ReplyField? parse(String raw) {
+    final keys = raw.split('.');
+    return keys.any((k) => k.isEmpty) ? null : ReplyField._(keys);
+  }
+
+  static ReplyField? _read(Map<String, Object?> json, String name) =>
+      switch (json[name]) {
+        null => null,
+        final String raw =>
+          parse(raw) ??
+              (throw FormatException('$name is not a field path: $raw')),
+        _ => throw FormatException('$name is not a field path'),
+      };
+
+  /// The non-empty text at this path in [body], or null when [body] is not
+  /// JSON or has no text there.
+  String? read(String body) {
+    Object? at;
+    try {
+      at = jsonDecode(body);
+    } on FormatException {
+      return null;
+    }
+    for (final key in _keys) {
+      at = at is Map<String, Object?> ? at[key] : null;
+    }
+    return at is String && at.isNotEmpty ? at : null;
+  }
+
+  @override
+  String toString() => _keys.join('.');
 }
