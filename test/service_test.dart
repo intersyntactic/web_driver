@@ -10,12 +10,12 @@ final class Echo implements WebDriver {
   final sent = <Request>[];
 
   @override
-  Future<Outcome<Sent>> send(Request request) async {
+  Future<Outcome<WebRequestOutcome>> carryOutWebRequest(Request request) async {
     sent.add(request);
-    if (request.path == '/refuse') {
-      return Ran(Sent(status: 400, refusedBecause: 'BadArgument'));
+    if (request.path.value == '/refuse') {
+      return Ran(WebRequestOutcome(status: 400, refusedBecause: 'BadArgument'));
     }
-    return Ran(Sent(status: 201, created: request.path));
+    return Ran(WebRequestOutcome(status: 201, created: request.path.value));
   }
 }
 
@@ -49,17 +49,17 @@ void main() {
   test('carries out a request from its caller, and answers it', () async {
     final service = await WebDriverService.start(driver, me, socket);
     addTearDown(service.close);
-    final out = await SocketWebDriver(socket).send(
+    final out = await SocketWebDriver(socket).carryOutWebRequest(
       Request(
         api,
         method: Method.post,
-        path: '/v3/things',
+        path: WebPath.parse('/v3/things')!,
         signIn: SignIn.parse('some-bot'),
         headers: {'content-type': 'application/json'},
         body: '{"a":1}',
       ),
     );
-    final sent = (out as Ran<Sent>).output;
+    final sent = (out as Ran<WebRequestOutcome>).output;
     expect(sent.status, 201);
     expect(sent.created, '/v3/things');
     expect(sent.refusedBecause, isNull);
@@ -75,13 +75,15 @@ void main() {
     final service = await WebDriverService.start(driver, me, socket);
     addTearDown(service.close);
     final out = await SocketWebDriver(socket)
-        .send(Request(api, path: '/refuse'));
-    final sent = (out as Ran<Sent>).output;
+        .carryOutWebRequest(Request(api, path: WebPath.parse('/refuse')!));
+    final sent = (out as Ran<WebRequestOutcome>).output;
     expect(sent.status, 400);
     expect(sent.refusedBecause, 'BadArgument');
   });
 
-  test('reads an answer from a service that sends no refusedBecause', () async {
+  // The answer from a driver before is_effects' wire format: never guessed
+  // at, so a driver and airlock deployed out of step fail loudly.
+  test('an answer it cannot read is a refusal', () async {
     final server = await ServerSocket.bind(
       InternetAddress(socket.path, type: InternetAddressType.unix),
       0,
@@ -92,14 +94,14 @@ void main() {
       s.write('{"ran":{"status":201,"created":"1:abc"}}\n');
       await s.close();
     });
-    final out = await SocketWebDriver(socket).send(Request(api));
-    expect((out as Ran<Sent>).output.created, '1:abc');
+    final out = await SocketWebDriver(socket).carryOutWebRequest(Request(api));
+    expect((out as Refused).why, contains('unreadable answer'));
   });
 
   test('answers no one but its caller, and carries out nothing', () async {
     final service = await WebDriverService.start(driver, me + 1, socket);
     addTearDown(service.close);
-    final out = await SocketWebDriver(socket).send(Request(api));
+    final out = await SocketWebDriver(socket).carryOutWebRequest(Request(api));
     expect(out, isA<Refused>());
     expect(driver.sent, isEmpty);
   });
@@ -128,7 +130,30 @@ void main() {
     expect(driver.sent, isEmpty);
   });
 
+  // A path cannot be built that names another site, but the socket carries
+  // text, which never went through WebPath.
+  test('refuses a path that would name another site', () async {
+    final service = await WebDriverService.start(driver, me, socket);
+    addTearDown(service.close);
+    for (final path in ['@evil.example/x', '//evil.example/x', '/a/../b']) {
+      final answer = await raw(
+        jsonEncode({
+          'origin': 'https://api.example',
+          'method': 'get',
+          'path': path,
+          'signIn': 'some-bot',
+          'headers': <String, String>{},
+        }),
+      );
+      expect(answer, contains('refused'));
+    }
+    expect(driver.sent, isEmpty);
+  });
+
   test('says so when no service is listening', () async {
-    expect(await SocketWebDriver(socket).send(Request(api)), isA<Refused>());
+    expect(
+      await SocketWebDriver(socket).carryOutWebRequest(Request(api)),
+      isA<Refused>(),
+    );
   });
 }

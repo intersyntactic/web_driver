@@ -45,11 +45,11 @@ final class SigningWebDriver implements WebDriver {
   static String _clip(String body) =>
       body.length <= 2000 ? body : '${body.substring(0, 2000)}…';
 
-  /// Shared by concurrent sends, so a burst asks for one token, not many.
+  /// Shared by concurrent web requests, so a burst asks for one token, not many.
   final _tokens = <SignIn, Future<_Token>>{};
 
   @override
-  Future<Outcome<Sent>> send(Request request) async {
+  Future<Outcome<WebRequestOutcome>> carryOutWebRequest(Request request) async {
     final url = _url(request);
     if (url == null) return Refused('path ${request.path} leaves its origin');
 
@@ -95,7 +95,7 @@ final class SigningWebDriver implements WebDriver {
       );
     }
     return Ran(
-      Sent(
+      WebRequestOutcome(
         status: r.status,
         created: ok ? credential?.created?.read(r.body) : null,
         refusedBecause: ok
@@ -174,12 +174,11 @@ final class SigningWebDriver implements WebDriver {
       : '${reason.substring(0, 200)}…';
 
   /// [Request.path] appended to its origin, or null when the result names
-  /// another site: `@evil.example` after `https://a.example` is a login to
-  /// `evil.example`.
+  /// another site. [WebPath] already cannot, so this is the backstop for the
+  /// one place a secret would follow the request somewhere it was not
+  /// decided to go.
   static Uri? _url(Request request) {
-    final path = request.path;
-    if (path.isNotEmpty && !path.startsWith('/')) return null;
-    final url = Uri.tryParse('${request.origin}$path');
+    final url = Uri.tryParse('${request.origin}${request.path.value}');
     if (url == null || Origin.parse(url.origin) != request.origin) return null;
     return url;
   }
