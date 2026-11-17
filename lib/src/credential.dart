@@ -93,6 +93,7 @@ sealed class Credential {
   /// The secret travels to it, so never in the clear.
   static Uri _https(String raw) {
     final uri = Uri.tryParse(raw);
+    // wire-ok: the credential file's text, checked once as it becomes a Uri.
     if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
       throw FormatException('not an https url: $raw');
     }
