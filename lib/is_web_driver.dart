@@ -3,4 +3,4 @@
 library;
 
 export 'src/credential.dart' show ClientCredentials, Credential, ReplyField;
-export 'src/signing_web_driver.dart';
+export 'src/web_driver.dart';

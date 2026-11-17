@@ -27,7 +27,7 @@ void main() {
   Iterable<Call> tokenCalls() =>
       calls.where((c) => c.url.host == 'auth.example');
 
-  SigningWebDriver driver() => SigningWebDriver(
+  WebDriver driver() => WebDriver(
     {bot: app},
     now: () => clock,
     http: (method, url, headers, body) async {
@@ -110,7 +110,7 @@ void main() {
   });
 
   test('a refusal from the destination still ran, and made nothing', () async {
-    final d = SigningWebDriver(
+    final d = WebDriver(
       {bot: app},
       now: () => clock,
       http: (_, url, _, _) async => url.host == 'auth.example'
@@ -128,7 +128,7 @@ void main() {
     'says why the destination refused, in the outcome and the log',
     () async {
       final log = <String>[];
-      final d = SigningWebDriver(
+      final d = WebDriver(
         {bot: app},
         now: () => clock,
         log: log.add,
@@ -156,7 +156,7 @@ void main() {
 
   test('logs why a token was refused, never the secret', () async {
     final log = <String>[];
-    final d = SigningWebDriver(
+    final d = WebDriver(
       {bot: app},
       log: log.add,
       http: (_, _, _, _) async => (
@@ -175,7 +175,7 @@ void main() {
 
   test('logs nothing when a send succeeds', () async {
     final log = <String>[];
-    final d = SigningWebDriver(
+    final d = WebDriver(
       {bot: app},
       now: () => clock,
       log: log.add,
@@ -188,7 +188,7 @@ void main() {
   });
 
   test('a token the sign-in service refuses is a refusal', () async {
-    final d = SigningWebDriver({
+    final d = WebDriver({
       bot: app,
     }, http: (_, _, _, _) async => (status: 401, body: '{}'));
     final out = await d.carryOutWebRequest(post(signIn: bot));

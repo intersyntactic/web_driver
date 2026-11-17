@@ -5,7 +5,7 @@
 /// A caller connects to the Unix socket, writes one [Request] in is_effects'
 /// JSON ([encodeRequest]) and closes its side; the service answers one line,
 /// the `Outcome<WebRequestOutcome>` ([encodeOutcome]), and closes.
-/// [SocketWebDriver] is that caller.
+/// [WebDriverSocket] is that caller.
 ///
 /// Who is calling is read from the socket as the kernel reports it, never
 /// from the request.
@@ -123,8 +123,8 @@ final class WebDriverService {
 
 /// [CarriesOutWebRequests] in another process: passes each request to the service at
 /// [socket]. Holds no secret.
-final class SocketWebDriver implements CarriesOutWebRequests {
-  SocketWebDriver(this.socket);
+final class WebDriverSocket implements CarriesOutWebRequests {
+  WebDriverSocket(this.socket);
 
   final File socket;
 
