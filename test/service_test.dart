@@ -49,7 +49,7 @@ void main() {
   test('carries out a request from its caller, and answers it', () async {
     final service = await WebDriverService.start(driver, me, socket);
     addTearDown(service.close);
-    final out = await SocketWebDriver(socket).carryOutWebRequest(
+    final out = await WebDriverSocket(socket).carryOutWebRequest(
       Request(
         api,
         method: Method.post,
@@ -74,7 +74,7 @@ void main() {
   test('carries why a destination refused back across the socket', () async {
     final service = await WebDriverService.start(driver, me, socket);
     addTearDown(service.close);
-    final out = await SocketWebDriver(socket)
+    final out = await WebDriverSocket(socket)
         .carryOutWebRequest(Request(api, path: WebPath.parse('/refuse')!));
     final sent = (out as Ran<WebRequestOutcome>).output;
     expect(sent.status, 400);
@@ -94,14 +94,14 @@ void main() {
       s.write('{"ran":{"status":201,"created":"1:abc"}}\n');
       await s.close();
     });
-    final out = await SocketWebDriver(socket).carryOutWebRequest(Request(api));
+    final out = await WebDriverSocket(socket).carryOutWebRequest(Request(api));
     expect((out as Refused).why, contains('unreadable answer'));
   });
 
   test('answers no one but its caller, and carries out nothing', () async {
     final service = await WebDriverService.start(driver, me + 1, socket);
     addTearDown(service.close);
-    final out = await SocketWebDriver(socket).carryOutWebRequest(Request(api));
+    final out = await WebDriverSocket(socket).carryOutWebRequest(Request(api));
     expect(out, isA<Refused>());
     expect(driver.sent, isEmpty);
   });
@@ -152,7 +152,7 @@ void main() {
 
   test('says so when no service is listening', () async {
     expect(
-      await SocketWebDriver(socket).carryOutWebRequest(Request(api)),
+      await WebDriverSocket(socket).carryOutWebRequest(Request(api)),
       isA<Refused>(),
     );
   });

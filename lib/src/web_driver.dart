@@ -19,8 +19,8 @@ typedef HttpCall = Future<HttpResult> Function(
 
 /// [CarriesOutWebRequests] by signing each request with the secret of the sign-in it
 /// names, and only for the sites that sign-in is for.
-final class SigningWebDriver implements CarriesOutWebRequests {
-  SigningWebDriver(
+final class WebDriver implements CarriesOutWebRequests {
+  WebDriver(
     Map<SignIn, Credential> signIns, {
     HttpCall? http,
     DateTime Function()? now,

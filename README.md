@@ -109,7 +109,7 @@ with the airlock, so neither side keeps a codec of its own:
 
 A web request that got a 4xx reply still `ran`. A path that would name
 another site can't be built as a `WebPath`, and the socket refuses one
-arriving as text before anything is made. The airlock side is `SocketWebDriver` from
+arriving as text before anything is made. The airlock side is `WebDriverSocket` from
 `package:is_web_driver/service.dart`. It `CarriesOutWebRequests` and holds no secret, so the airlock
 holds it as it would any other way of carrying out web requests. Each
 sign-in is its own file, so a sign-in that needs a wall of its own can run
