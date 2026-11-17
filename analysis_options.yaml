@@ -27,7 +27,7 @@ linter:
 
 plugins:
   is_lint_rules:
-    version: ^0.1.0
+    version: ^0.1.1
     diagnostics:
       no_dynamic: true
       no_cast_from_untyped: true
