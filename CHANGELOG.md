@@ -6,7 +6,7 @@
   driver itself, holding the secrets; `SocketWebDriver` is `WebDriverSocket`,
   the airlock's side of the web driver's socket. The old names said there
   were two kinds of web driver.
-- is_effects 0.6.0: `CarriesOutWebRequests.carryOutWebRequest` returning
+- is_effects 0.7.0: `CarriesOutWebRequests.carryOutWebRequest` returning
   `WebRequestOutcome` (formerly `WebDriver.send` and `Sent`, retired by name), and
   `Request.path` a `WebPath`, which cannot name another site.
 - The driver as its own service (`dart run is_web_driver:service`), which
