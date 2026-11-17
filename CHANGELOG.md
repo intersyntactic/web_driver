@@ -2,7 +2,7 @@
 
 ## 0.2.0
 
-- is_effects 0.4.0: `CarriesOutWebRequests.carryOutWebRequest` returning
+- is_effects 0.6.0: `CarriesOutWebRequests.carryOutWebRequest` returning
   `WebRequestOutcome` (formerly `WebDriver.send` and `Sent`, retired by name), and
   `Request.path` a `WebPath`, which cannot name another site.
 - The driver as its own service (`dart run is_web_driver:service`), which
