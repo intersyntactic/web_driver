@@ -1,7 +1,8 @@
 # is_web_driver
 
 intersyntactic's `WebDriver` (from [is_effects](https://github.com/intersyntactic/effects)):
-it sends a `Request` out of the home under one of the person's sign-ins. A
+it carries out a `Request` under one of the person's sign-ins: a web request
+the driver made, out of the home. A
 tool describes the request and names a sign-in such as `cam-teams`, and the
 airlock decides on it. This driver holds the secret and is the only piece
 that ever sees it.
@@ -12,7 +13,7 @@ destination adds sits in that sign-in's file: where its token comes from,
 which sites it's for, and which field of a reply names what was made. So
 Teams, Slack or GitHub is a file, not a change to this package.
 
-## What a send does
+## What carrying out a web request does
 
 1. **The path stays on its origin.** `path` is appended to `origin`, and the
    driver refuses anything that would name another site. For example,
@@ -21,18 +22,18 @@ Teams, Slack or GitHub is a file, not a change to this package.
 2. **A sign-in goes only to its own sites.** The airlock decides by name
    alone, so it can't know that a sign-in next to an origin outside its file
    would hand a token to a stranger. Only the driver can, and it refuses that
-   send.
+   web request.
 3. **The driver signs the request.** It does this the way the sign-in's kind
    says, and keeps any token until five minutes before it expires. Concurrent
-   sends share a single fetch.
-4. **It reads what the destination made.** That becomes `Sent.created`: the
+   web requests share a single fetch.
+4. **It reads what the destination made.** That becomes `WebRequestOutcome.created`: the
    field the sign-in names, taken from a 2xx JSON reply.
 
 5. **It says why a destination refused.** A failure moves a piece of
    information of its own: why. A `400`'s body names the problem, and a
    refused token's names the cause (`AADSTS7000215` is a wrong secret).
    The record keeps what it's given for good, so it gets **a word, not the
-   body**. `Sent.refusedBecause` is the one field the sign-in names as its
+   body**. `WebRequestOutcome.refusedBecause` is the one field the sign-in names as its
    reason, such as `error.code` → `ConversationNotFound`. A refused token's
    `Refused` reason carries OAuth's own `error` code, such as
    `invalid_client`. The whole body goes only to the driver's log, for
@@ -41,7 +42,7 @@ Teams, Slack or GitHub is a file, not a change to this package.
    never logged, and neither is a token service's 200, since that body is
    the token.
 
-`Ran(Sent)` means the request left the home and got a reply, whatever its
+`Ran(WebRequestOutcome)` means the request left the home and got a reply, whatever its
 status. `Refused` means nothing reached the destination: an unknown sign-in,
 a foreign origin or path, a token the sign-in service wouldn't issue, or a
 network failure before any reply.
@@ -96,16 +97,20 @@ WEB_DRIVER_SOCKET=/run/intersyntactic-web-driver/web-driver.sock \
 The service reads who is calling from the socket, as the kernel reports it
 (`SO_PEERCRED`), the same way is_journal's writer knows its senders. It
 answers no one else: a connection from any other user is closed unanswered,
-and nothing is sent. A caller sends one request per connection and closes
-its side. The service answers one line and closes:
+and no web request is made. A caller writes one request per connection and closes
+its side. The service answers one line and closes. Both are is_effects' own JSON
+(`encodeRequest`, `encodeOutcome` with `encodeWebRequestOutcome`), shared
+with the airlock, so neither side keeps a codec of its own:
 
 ```
 → {"origin":"https://…","method":"post","path":"/…","signIn":"cam-teams","headers":{…},"body":"…"}
-← {"ran":{"status":201,"created":"…"}}      or      {"refused":"why"}
+← {"kind":"ran","output":{"status":201,"created":"…","refusedBecause":null}}
+← {"kind":"refused","why":"…"}
 ```
 
-The answer mirrors `Outcome<Sent>`: a send that got a 4xx reply still
-`ran`. The airlock side is `SocketWebDriver` from
+A web request that got a 4xx reply still `ran`. A path that would name
+another site can't be built as a `WebPath`, and the socket refuses one
+arriving as text before anything is made. The airlock side is `SocketWebDriver` from
 `package:is_web_driver/service.dart`. It is an ordinary `WebDriver` that
 holds no secret, so a journey path is given it like any other driver. Each
 sign-in is its own file, so a sign-in that needs a wall of its own can run

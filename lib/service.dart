@@ -2,10 +2,10 @@
 /// may call. It runs as its own user, so a sign-in's secret is readable by
 /// this process and no other: not the airlock, not another driver.
 ///
-/// A caller connects to the Unix socket, sends one request (see
-/// [encodeRequest]) and closes its side; the service answers one line, the
-/// outcome (see [encodeOutcome]), and closes. [SocketWebDriver] is that
-/// caller.
+/// A caller connects to the Unix socket, writes one [Request] in is_effects'
+/// JSON ([encodeRequest]) and closes its side; the service answers one line,
+/// the `Outcome<WebRequestOutcome>` ([encodeOutcome]), and closes.
+/// [SocketWebDriver] is that caller.
 ///
 /// Who is calling is read from the socket as the kernel reports it, never
 /// from the request.
@@ -18,10 +18,6 @@ import 'dart:typed_data';
 
 import 'package:is_effects/is_effects.dart';
 
-import 'src/wire.dart';
-
-export 'src/wire.dart' show encodeOutcome, encodeRequest;
-
 final class WebDriverService {
   WebDriverService._(this._driver, this._caller, this._socket, this._server);
 
@@ -30,7 +26,7 @@ final class WebDriverService {
   final File _socket;
   final ServerSocket _server;
 
-  /// A request is a send's headers and body, so far smaller than this.
+  /// A request is a web request's headers and body, so far smaller than this.
   static const maxRequest = 1 << 20;
 
   /// Listens on [socket], carrying out requests through [driver] for the
@@ -87,18 +83,37 @@ final class WebDriverService {
         }
         request.add(chunk);
       }
-      final Outcome<Sent> outcome;
+      final Outcome<WebRequestOutcome> outcome;
       if (tooLarge) {
         outcome = const Refused('request too large');
       } else {
-        final decoded = decodeRequest(
-          utf8.decode(request.takeBytes(), allowMalformed: true),
-        );
-        outcome = decoded is Request
-            ? await _driver.send(decoded)
-            : Refused('$decoded');
+        final Request decoded;
+        try {
+          decoded = decodeRequest(
+            jsonDecode(utf8.decode(request.takeBytes(), allowMalformed: true)),
+          );
+        } on FormatException catch (e) {
+          await _answer(socket, Refused('not a request: ${e.message}'));
+          return;
+        }
+        outcome = await _driver.carryOutWebRequest(decoded);
       }
-      socket.add(utf8.encode('${encodeOutcome(outcome)}\n'));
+      await _answer(socket, outcome);
+    } on SocketException {
+      socket.destroy();
+    }
+  }
+
+  static Future<void> _answer(
+    Socket socket,
+    Outcome<WebRequestOutcome> outcome,
+  ) async {
+    try {
+      socket.add(
+        utf8.encode(
+          '${jsonEncode(encodeOutcome(outcome, encodeWebRequestOutcome))}\n',
+        ),
+      );
       await socket.close();
     } on SocketException {
       socket.destroy();
@@ -106,7 +121,7 @@ final class WebDriverService {
   }
 }
 
-/// A [WebDriver] in another process: sends each request to the service at
+/// A [WebDriver] in another process: passes each request to the service at
 /// [socket]. Holds no secret.
 final class SocketWebDriver implements WebDriver {
   SocketWebDriver(this.socket);
@@ -114,19 +129,21 @@ final class SocketWebDriver implements WebDriver {
   final File socket;
 
   @override
-  Future<Outcome<Sent>> send(Request request) async {
+  Future<Outcome<WebRequestOutcome>> carryOutWebRequest(Request request) async {
     try {
       final s = await Socket.connect(
         InternetAddress(socket.path, type: InternetAddressType.unix),
         0,
       );
-      s.add(utf8.encode(encodeRequest(request)));
+      s.add(utf8.encode(jsonEncode(encodeRequest(request))));
       await s.close();
       final answer = await utf8.decoder.bind(s).join();
       if (answer.isEmpty) return const Refused('web driver: refused caller');
-      return decodeOutcome(answer.trim());
+      return decodeOutcome(jsonDecode(answer), decodeWebRequestOutcome);
     } on SocketException catch (e) {
       return Refused('web driver: ${e.message}');
+    } on FormatException catch (e) {
+      return Refused('web driver: unreadable answer: ${e.message}');
     }
   }
 }

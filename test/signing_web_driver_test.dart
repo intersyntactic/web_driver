@@ -47,8 +47,13 @@ void main() {
     },
   );
 
-  Request post({SignIn? signIn, String path = '/v3/things'}) =>
-      Request(api, method: Method.post, path: path, signIn: signIn, body: '{}');
+  Request post({SignIn? signIn, String path = '/v3/things'}) => Request(
+    api,
+    method: Method.post,
+    path: WebPath.parse(path)!,
+    signIn: signIn,
+    body: '{}',
+  );
 
   setUp(() {
     calls = [];
@@ -57,8 +62,8 @@ void main() {
   });
 
   test('signs with a client-credentials token and reads created', () async {
-    final out = await driver().send(post(signIn: bot));
-    final sent = (out as Ran<Sent>).output;
+    final out = await driver().carryOutWebRequest(post(signIn: bot));
+    final sent = (out as Ran<WebRequestOutcome>).output;
     expect(sent.status, 201);
     expect(sent.created, '1:abc');
     expect(calls.last.url.toString(), 'https://api.example/v3/things');
@@ -67,48 +72,40 @@ void main() {
 
   test('keeps a token until five minutes before it expires', () async {
     final d = driver();
-    await d.send(post(signIn: bot));
+    await d.carryOutWebRequest(post(signIn: bot));
     clock = clock.add(const Duration(minutes: 54));
-    await d.send(post(signIn: bot));
+    await d.carryOutWebRequest(post(signIn: bot));
     expect(tokenCalls(), hasLength(1));
     clock = clock.add(const Duration(minutes: 2));
-    await d.send(post(signIn: bot));
+    await d.carryOutWebRequest(post(signIn: bot));
     expect(tokenCalls(), hasLength(2));
   });
 
   test('concurrent sends share one token fetch', () async {
     final d = driver();
-    await Future.wait([for (var i = 0; i < 5; i++) d.send(post(signIn: bot))]);
+    await Future.wait([
+      for (var i = 0; i < 5; i++) d.carryOutWebRequest(post(signIn: bot)),
+    ]);
     expect(tokenCalls(), hasLength(1));
   });
 
   test('never shows a sign-in to a site it is not for', () async {
     final other = Request(Origin.parse('https://example.com')!, signIn: bot);
-    expect(await driver().send(other), isA<Refused>());
-    expect(calls, isEmpty);
-  });
-
-  test('refuses a path that would name another site', () async {
-    for (final path in ['@evil.example/x', '.evil.example/x']) {
-      expect(
-        await driver().send(post(signIn: bot, path: path)),
-        isA<Refused>(),
-      );
-    }
+    expect(await driver().carryOutWebRequest(other), isA<Refused>());
     expect(calls, isEmpty);
   });
 
   test('refuses a sign-in it does not hold', () async {
     expect(
-      await driver().send(post(signIn: SignIn.parse('nobody')!)),
+      await driver().carryOutWebRequest(post(signIn: SignIn.parse('nobody')!)),
       isA<Refused>(),
     );
     expect(calls, isEmpty);
   });
 
   test('sends under no sign-in without a credential', () async {
-    final out = await driver().send(post());
-    expect((out as Ran<Sent>).output.created, isNull);
+    final out = await driver().carryOutWebRequest(post());
+    expect((out as Ran<WebRequestOutcome>).output.created, isNull);
     expect(calls.single.headers, isNot(contains('authorization')));
   });
 
@@ -120,7 +117,9 @@ void main() {
           ? (status: 200, body: '{"access_token":"t","expires_in":3600}')
           : (status: 403, body: '{"id":"x"}'),
     );
-    final sent = ((await d.send(post(signIn: bot))) as Ran<Sent>).output;
+    final sent = ((await d.carryOutWebRequest(
+      post(signIn: bot),
+    )) as Ran<WebRequestOutcome>).output;
     expect(sent.status, 403);
     expect(sent.created, isNull);
   });
@@ -142,7 +141,9 @@ void main() {
                     '"message":"Conversation 19:abc@thread not found"}}',
               ),
       );
-      final sent = ((await d.send(post(signIn: bot))) as Ran<Sent>).output;
+      final sent = ((await d.carryOutWebRequest(
+        post(signIn: bot),
+      )) as Ran<WebRequestOutcome>).output;
       // The word the sign-in names, for the record; the rest only logged.
       expect(sent.refusedBecause, 'ConversationNotFound');
       expect(log.single, contains('19:abc@thread'));
@@ -163,7 +164,7 @@ void main() {
         body: '{"error":"invalid_client","error_codes":[7000215]}',
       ),
     );
-    final out = await d.send(post(signIn: bot));
+    final out = await d.carryOutWebRequest(post(signIn: bot));
     // OAuth's own error code for the record; Microsoft's number only logged.
     expect((out as Refused).why, contains('invalid_client'));
     expect(out.why, isNot(contains('7000215')));
@@ -182,7 +183,7 @@ void main() {
           ? (status: 200, body: '{"access_token":"t0ken","expires_in":3600}')
           : (status: 201, body: '{"id":"1"}'),
     );
-    await d.send(post(signIn: bot));
+    await d.carryOutWebRequest(post(signIn: bot));
     expect(log, isEmpty);
   });
 
@@ -190,7 +191,7 @@ void main() {
     final d = SigningWebDriver({
       bot: app,
     }, http: (_, _, _, _) async => (status: 401, body: '{}'));
-    final out = await d.send(post(signIn: bot));
+    final out = await d.carryOutWebRequest(post(signIn: bot));
     expect((out as Refused).why, isNot(contains('s3cret')));
   });
 
