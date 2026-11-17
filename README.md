@@ -2,7 +2,7 @@
 
 intersyntactic's `WebDriver` (from [is_effects](https://github.com/intersyntactic/effects)):
 it sends a `Request` out of the home under one of the person's sign-ins. A
-tool describes the request and names a sign-in such as `cam`, and the
+tool describes the request and names a sign-in such as `cam-teams`, and the
 airlock decides on it. This driver holds the secret and is the only piece
 that ever sees it.
 
@@ -63,7 +63,7 @@ to, and two optional reply fields, each a path of keys such as `error.code`:
 `created`, naming what a 2xx reply made, and `refusedBecause`, naming why a
 non-2xx reply refused.
 
-For example, `cam` is a Teams bot. Its `created` is the new activity's
+For example, `cam-teams` is a Teams bot. Its `created` is the new activity's
 id, which a card press names later. Its `refusedBecause` is the Bot
 Framework error's code:
 
@@ -100,7 +100,7 @@ and nothing is sent. A caller sends one request per connection and closes
 its side. The service answers one line and closes:
 
 ```
-→ {"origin":"https://…","method":"post","path":"/…","signIn":"cam","headers":{…},"body":"…"}
+→ {"origin":"https://…","method":"post","path":"/…","signIn":"cam-teams","headers":{…},"body":"…"}
 ← {"ran":{"status":201,"created":"…"}}      or      {"refused":"why"}
 ```
 
