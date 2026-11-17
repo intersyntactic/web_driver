@@ -6,7 +6,7 @@ import 'package:is_web_driver/service.dart';
 import 'package:test/test.dart';
 
 /// Answers every send with 201 and the request's path as what it made.
-final class Echo implements WebDriver {
+final class Echo implements CarriesOutWebRequests {
   final sent = <Request>[];
 
   @override

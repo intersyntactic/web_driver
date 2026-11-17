@@ -21,7 +21,7 @@ import 'package:is_effects/is_effects.dart';
 final class WebDriverService {
   WebDriverService._(this._driver, this._caller, this._socket, this._server);
 
-  final WebDriver _driver;
+  final CarriesOutWebRequests _driver;
   final int _caller;
   final File _socket;
   final ServerSocket _server;
@@ -32,7 +32,7 @@ final class WebDriverService {
   /// Listens on [socket], carrying out requests through [driver] for the
   /// user [caller] alone. A socket file nothing listens on is replaced.
   static Future<WebDriverService> start(
-    WebDriver driver,
+    CarriesOutWebRequests driver,
     int caller,
     File socket,
   ) async {
@@ -121,9 +121,9 @@ final class WebDriverService {
   }
 }
 
-/// A [WebDriver] in another process: passes each request to the service at
+/// [CarriesOutWebRequests] in another process: passes each request to the service at
 /// [socket]. Holds no secret.
-final class SocketWebDriver implements WebDriver {
+final class SocketWebDriver implements CarriesOutWebRequests {
   SocketWebDriver(this.socket);
 
   final File socket;
