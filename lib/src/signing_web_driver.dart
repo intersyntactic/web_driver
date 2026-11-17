@@ -17,9 +17,9 @@ typedef HttpCall = Future<HttpResult> Function(
   String body,
 );
 
-/// A [WebDriver] that signs each request with the secret of the sign-in it
+/// [CarriesOutWebRequests] by signing each request with the secret of the sign-in it
 /// names, and only for the sites that sign-in is for.
-final class SigningWebDriver implements WebDriver {
+final class SigningWebDriver implements CarriesOutWebRequests {
   SigningWebDriver(
     Map<SignIn, Credential> signIns, {
     HttpCall? http,
