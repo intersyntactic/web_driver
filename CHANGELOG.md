@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+- is_effects ^0.8.0. The API is unchanged, but it takes and returns
+  is_effects types, so it can't share a project with is_effects 0.7. The
+  socket's JSON is byte for byte the same, so a 0.2.0 driver and a 0.3.0
+  airlock still understand each other.
+
 ## 0.2.0
 
 - One web driver and its socket: `SigningWebDriver` is `WebDriver`, the web

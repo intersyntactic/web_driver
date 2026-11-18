@@ -3,7 +3,7 @@ description: >-
   intersyntactic's web driver: sends requests out of the home under the
   person's sign-ins, holding each sign-in's secret so no tool or record
   ever sees it.
-version: 0.2.0
+version: 0.3.0
 repository: https://github.com/intersyntactic/web_driver
 
 environment:
