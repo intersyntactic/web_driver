@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0
+
+- is_effects ^0.11.0. A 2xx response's body comes back as `Request.keep`
+  asks: `NoBody`, `TextBody` or `BytesBody`. `maxBodyBytes` (16 MiB by
+  default) caps what is read; keeping a body over it is `Refused`, as is
+  keeping text that isn't UTF-8.
+- A GET's redirect is followed, only to a site in the sign-in's file (or,
+  with no sign-in, the site decided), for at most three hops, and every hop
+  is named in `WebResponse.redirects` without its query. The sign-in's
+  secret goes only to the site decided, never across a hop. Any other
+  redirect is `Refused`; a non-GET still gets its redirect as the answer.
+- **Breaking:** `HttpCall` takes a fifth argument, the most body bytes to
+  read, and `HttpResult` is `({int status, Uint8List? body, Uri? location})`:
+  the body as bytes, null when over that limit.
+
 ## 0.4.2
 
 - `httpCall` no longer follows redirects. A 3xx comes back as the response's

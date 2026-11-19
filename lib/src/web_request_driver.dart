@@ -1,20 +1,25 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:is_effects/is_effects.dart';
 
 import 'credential.dart';
 
-typedef HttpResult = ({int status, String body});
+/// One HTTP response: its [status], its [body] or null when the body ran
+/// past the call's limit, and the address a redirect names in [location].
+typedef HttpResult = ({int status, Uint8List? body, Uri? location});
 
-/// Makes one HTTP call. Injected, so the driver is testable without a
+/// Makes one HTTP call, reading at most [maxBytes] of the body and never
+/// following a redirect. Injected, so the driver is testable without a
 /// network.
 typedef HttpCall = Future<HttpResult> Function(
   String method,
   Uri url,
   Map<String, String> headers,
   String body,
+  int maxBytes,
 );
 
 /// [CarriesOutWebRequests] by signing each request with the secret of the sign-in it
@@ -25,6 +30,7 @@ final class WebRequestDriver implements CarriesOutWebRequests {
     HttpCall? http,
     DateTime Function()? now,
     void Function(String line)? log,
+    this.maxBodyBytes = 16 * 1024 * 1024,
   }) : _signIns = Map.unmodifiable(signIns),
        _http = http ?? httpCall,
        _now = now ?? DateTime.now,
@@ -33,6 +39,16 @@ final class WebRequestDriver implements CarriesOutWebRequests {
   final Map<SignIn, Credential> _signIns;
   final HttpCall _http;
   final DateTime Function() _now;
+
+  /// The largest body read from a site. A body kept for the record that is
+  /// larger is [Refused].
+  final int maxBodyBytes;
+
+  /// Redirects followed for one request; one more is [Refused].
+  static const maxRedirects = 3;
+
+  /// A token reply is a few hundred bytes; anything near this is not one.
+  static const _maxTokenBytes = 64 * 1024;
 
   /// Where a refusal's reason goes when only its body says it: a non-2xx
   /// reply, or a token the sign-in service would not issue. For whoever runs
@@ -64,46 +80,119 @@ final class WebRequestDriver implements CarriesOutWebRequests {
       return Refused('$signIn is not for ${request.origin}');
     }
 
-    final headers = {...request.headers};
+    final signedHeaders = {...request.headers};
     if (credential != null) {
       switch (await _authorization(signIn!, credential)) {
         case Ran(output: final value):
-          headers['authorization'] = value;
+          signedHeaders['authorization'] = value;
         case final Refused refused:
           return refused;
       }
     }
 
-    final HttpResult r;
-    try {
-      r = await _http(
-        request.method.name.toUpperCase(),
-        url,
-        headers,
-        request.body ?? '',
-      );
-    } on IOException catch (e) {
-      return Refused('${request.origin}: $e');
-    } on TimeoutException {
-      return Refused('${request.origin}: timed out');
+    // A redirect is followed only for a GET, which changes nothing, so
+    // refusing a hop never hides something the site already did; and only
+    // to a site the sign-in is for, or with no sign-in, the site decided on.
+    final mayReach = credential?.origins ?? {request.origin};
+    final method = request.method.name.toUpperCase();
+    final redirects = <RedirectedTo>[];
+    var at = url;
+    HttpResult r;
+    while (true) {
+      final home = _origin(at) == request.origin;
+      try {
+        r = await _http(
+          method,
+          at,
+          home ? signedHeaders : request.headers,
+          home ? request.body ?? '' : '',
+          maxBodyBytes,
+        );
+      } on IOException catch (e) {
+        return Refused('${_origin(at)}: $e');
+      } on TimeoutException {
+        return Refused('${_origin(at)}: timed out');
+      }
+      final location = r.location;
+      if (request.method != Method.get ||
+          !_redirects.contains(r.status) ||
+          location == null) {
+        break;
+      }
+      final next = at.resolveUri(location);
+      final hop = RedirectedTo.of(next);
+      final origin = _origin(next);
+      if (hop == null || origin == null || !mayReach.contains(origin)) {
+        return Refused(
+          '${request.origin} redirected to ${origin ?? 'a non-web address'}'
+          '${signIn == null ? '' : ', which $signIn is not for'}',
+        );
+      }
+      if (redirects.length == maxRedirects) {
+        return Refused(
+          '${request.origin} redirected more than $maxRedirects times',
+        );
+      }
+      redirects.add(hop);
+      at = next;
     }
+
     final ok = r.status >= 200 && r.status <= 299;
+    final bytes = r.body;
+    final text = bytes == null
+        ? null
+        : utf8.decode(bytes, allowMalformed: true);
     if (!ok) {
       _log(
-        '${request.method.name.toUpperCase()} $url '
-        '${signIn == null ? '' : 'as $signIn '}${r.status}: ${_clip(r.body)}',
+        '$method $url ${signIn == null ? '' : 'as $signIn '}'
+        '${redirects.isEmpty ? '' : 'via ${redirects.join(' ')} '}'
+        '${r.status}: ${text == null ? 'body over $maxBodyBytes bytes' : _clip(text)}',
       );
+    }
+    final ResponseBody body;
+    switch (_keep(ok ? request.keep : BodyToKeep.none, bytes)) {
+      case Ran(output: final kept):
+        body = kept;
+      case Refused(:final why):
+        return Refused('${redirects.lastOrNull ?? request.origin}: $why');
     }
     return Ran(
       WebResponse(
         status: r.status,
-        created: ok ? credential?.created?.read(r.body) : null,
-        refusedBecause: ok
+        created: ok && text != null ? credential?.created?.read(text) : null,
+        refusedBecause: ok || text == null
             ? null
-            : _word(credential?.refusedBecause?.read(r.body)),
+            : _word(credential?.refusedBecause?.read(text)),
+        body: body,
+        redirects: List.unmodifiable(redirects),
       ),
     );
   }
+
+  static const _redirects = {301, 302, 303, 307, 308};
+
+  /// What of [bytes] to keep, as [keep] asks; [bytes] is null when the body
+  /// ran past [maxBodyBytes].
+  Outcome<ResponseBody> _keep(BodyToKeep keep, Uint8List? bytes) =>
+      switch ((keep, bytes)) {
+        (BodyToKeep.none, _) => const Ran(NoBody()),
+        (_, null) => Refused('body over $maxBodyBytes bytes'),
+        (BodyToKeep.text, final kept?) => _utf8(kept),
+        (BodyToKeep.bytes, final kept?) => Ran(BytesBody(kept)),
+      };
+
+  static Outcome<ResponseBody> _utf8(Uint8List bytes) {
+    try {
+      return Ran(TextBody(utf8.decode(bytes)));
+    } on FormatException {
+      return const Refused('body is not UTF-8');
+    }
+  }
+
+  /// [url]'s site, or null when it is not an http(s) one.
+  static Origin? _origin(Uri url) => Origin.parse(
+    Uri(scheme: url.scheme, host: url.host, port: url.port).toString(),
+  );
 
   Future<Outcome<String>> _authorization(
     SignIn signIn,
@@ -134,24 +223,31 @@ final class WebRequestDriver implements CarriesOutWebRequests {
   Future<_Token> _clientCredentialsToken(ClientCredentials app) async {
     final HttpResult r;
     try {
-      r = await _http('POST', app.tokenUrl, {
-        'content-type': 'application/x-www-form-urlencoded',
-      }, app.tokenForm);
+      r = await _http(
+        'POST',
+        app.tokenUrl,
+        {'content-type': 'application/x-www-form-urlencoded'},
+        app.tokenForm,
+        _maxTokenBytes,
+      );
     } on IOException catch (e) {
       throw _TokenRefused('token: $e');
     } on TimeoutException {
       throw _TokenRefused('token: timed out');
     }
+    final bytes = r.body;
+    if (bytes == null) throw _TokenRefused('token: reply too large');
+    final body = utf8.decode(bytes, allowMalformed: true);
     if (r.status != 200) {
       // A refusal's body is the service's error, never the token: a 200's
       // body is not logged, since that is where the token is.
-      _log('token from ${app.tokenUrl.host} ${r.status}: ${_clip(r.body)}');
-      final error = _word(_oauthError.read(r.body));
+      _log('token from ${app.tokenUrl.host} ${r.status}: ${_clip(body)}');
+      final error = _word(_oauthError.read(body));
       throw _TokenRefused(
         'token: ${r.status}${error == null ? '' : ' $error'}',
       );
     }
-    return switch (_json(r.body)) {
+    return switch (_json(body)) {
       {'access_token': final String value, 'expires_in': final int seconds} =>
         _Token(
           value,
@@ -206,28 +302,43 @@ final class _TokenRefused implements Exception {
   String toString() => why;
 }
 
-/// [HttpCall] over `dart:io`, with a ten-second limit on each step. A
-/// redirect is answered, not followed: following one would send the request
-/// to a site no one decided on, and the record would not show it.
+/// [HttpCall] over `dart:io`, giving up after ten seconds without progress.
+/// A redirect is answered, not followed: the driver decides which to
+/// follow, since `dart:io` would send the request to any site and the
+/// record would not show it.
 Future<HttpResult> httpCall(
   String method,
   Uri url,
   Map<String, String> headers,
   String body,
+  int maxBytes,
 ) async {
-  final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+  const quiet = Duration(seconds: 10);
+  final client = HttpClient()..connectionTimeout = quiet;
   try {
     final req = await client.openUrl(method, url)
       ..followRedirects = false;
     headers.forEach(req.headers.set);
     req.add(utf8.encode(body));
-    final res = await req.close().timeout(const Duration(seconds: 10));
-    final text = await res
-        .transform(utf8.decoder)
-        .join()
-        .timeout(const Duration(seconds: 10));
-    return (status: res.statusCode, body: text);
+    final res = await req.close().timeout(quiet);
+    final location = res.headers.value(HttpHeaders.locationHeader);
+    final read = BytesBuilder(copy: false);
+    await for (final chunk in res.timeout(quiet)) {
+      read.add(chunk);
+      if (read.length > maxBytes) {
+        return (
+          status: res.statusCode,
+          body: null,
+          location: location == null ? null : Uri.tryParse(location),
+        );
+      }
+    }
+    return (
+      status: res.statusCode,
+      body: read.takeBytes(),
+      location: location == null ? null : Uri.tryParse(location),
+    );
   } finally {
-    client.close();
+    client.close(force: true);
   }
 }
