@@ -1,11 +1,11 @@
-/// Runs the web driver as a service (see `package:is_web_driver/service.dart`):
+/// Runs the web request driver as a service (see `package:is_web_request_driver/service.dart`):
 ///
-///     WEB_DRIVER_SOCKET=/run/intersyntactic-web-driver/web-driver.sock \
-///       WEB_DRIVER_CALLER=airlock \
+///     WEB_REQUEST_DRIVER_SOCKET=/run/intersyntactic-web-driver/web-driver.sock \
+///       WEB_REQUEST_DRIVER_CALLER=airlock \
 ///       CREDENTIALS_DIRECTORY=... \
-///       dart run is_web_driver:service
+///       dart run is_web_request_driver:service
 ///
-/// `WEB_DRIVER_CALLER` is the one user, by name or id, whose requests it
+/// `WEB_REQUEST_DRIVER_CALLER` is the one user, by name or id, whose requests it
 /// carries out. systemd sets `CREDENTIALS_DIRECTORY` from `LoadCredential=`.
 ///
 /// Exits 78 when it cannot start as configured, and closes cleanly on
@@ -16,15 +16,15 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:is_effects/is_effects.dart';
-import 'package:is_web_driver/is_web_driver.dart';
-import 'package:is_web_driver/service.dart';
+import 'package:is_web_request_driver/is_web_request_driver.dart';
+import 'package:is_web_request_driver/service.dart';
 
 Future<void> main() async {
   final env = Platform.environment;
   final [socket, caller, credentials] = [
     for (final name in [
-      'WEB_DRIVER_SOCKET',
-      'WEB_DRIVER_CALLER',
+      'WEB_REQUEST_DRIVER_SOCKET',
+      'WEB_REQUEST_DRIVER_CALLER',
       'CREDENTIALS_DIRECTORY',
     ])
       env[name] ?? _fail('$name is not set'),
@@ -36,10 +36,10 @@ Future<void> main() async {
   } on Exception catch (e) {
     _fail('$e');
   }
-  final WebDriverService service;
+  final WebRequestDriverService service;
   try {
-    service = await WebDriverService.start(
-      WebDriver(signIns, log: stdout.writeln),
+    service = await WebRequestDriverService.start(
+      WebRequestDriver(signIns, log: stdout.writeln),
       uid,
       File(socket),
     );
@@ -68,6 +68,6 @@ int? _uidOf(String user) {
 }
 
 Never _fail(String why) {
-  stderr.writeln('is_web_driver service: $why');
+  stderr.writeln('is_web_request_driver service: $why');
   exit(78);
 }

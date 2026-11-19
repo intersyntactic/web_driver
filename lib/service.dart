@@ -1,11 +1,11 @@
-/// The web driver as a service of its own, which only the airlock's user
+/// The web request driver as a service of its own, which only the airlock's user
 /// may call. It runs as its own user, so a sign-in's secret is readable by
 /// this process and no other: not the airlock, not another driver.
 ///
 /// A caller connects to the Unix socket, writes one [Request] in is_effects'
 /// JSON ([encodeRequest]) and closes its side; the service answers one line,
-/// the `Outcome<WebRequestOutcome>` ([encodeOutcome]), and closes.
-/// [WebDriverSocket] is that caller.
+/// the `Outcome<WebResponse>` ([encodeOutcome]), and closes.
+/// [WebRequestDriverSocket] is that caller.
 ///
 /// Who is calling is read from the socket as the kernel reports it, never
 /// from the request.
@@ -18,8 +18,8 @@ import 'dart:typed_data';
 
 import 'package:is_effects/is_effects.dart';
 
-final class WebDriverService {
-  WebDriverService._(this._driver, this._caller, this._socket, this._server);
+final class WebRequestDriverService {
+  WebRequestDriverService._(this._driver, this._caller, this._socket, this._server);
 
   final CarriesOutWebRequests _driver;
   final int _caller;
@@ -31,12 +31,12 @@ final class WebDriverService {
 
   /// Listens on [socket], carrying out requests through [driver] for the
   /// user [caller] alone. A socket file nothing listens on is replaced.
-  static Future<WebDriverService> start(
+  static Future<WebRequestDriverService> start(
     CarriesOutWebRequests driver,
     int caller,
     File socket,
   ) async {
-    final service = WebDriverService._(
+    final service = WebRequestDriverService._(
       driver,
       caller,
       socket,
@@ -83,7 +83,7 @@ final class WebDriverService {
         }
         request.add(chunk);
       }
-      final Outcome<WebRequestOutcome> outcome;
+      final Outcome<WebResponse> outcome;
       if (tooLarge) {
         outcome = const Refused('request too large');
       } else {
@@ -106,12 +106,12 @@ final class WebDriverService {
 
   static Future<void> _answer(
     Socket socket,
-    Outcome<WebRequestOutcome> outcome,
+    Outcome<WebResponse> outcome,
   ) async {
     try {
       socket.add(
         utf8.encode(
-          '${jsonEncode(encodeOutcome(outcome, encodeWebRequestOutcome))}\n',
+          '${jsonEncode(encodeOutcome(outcome, encodeWebResponse))}\n',
         ),
       );
       await socket.close();
@@ -123,13 +123,13 @@ final class WebDriverService {
 
 /// [CarriesOutWebRequests] in another process: passes each request to the service at
 /// [socket]. Holds no secret.
-final class WebDriverSocket implements CarriesOutWebRequests {
-  WebDriverSocket(this.socket);
+final class WebRequestDriverSocket implements CarriesOutWebRequests {
+  WebRequestDriverSocket(this.socket);
 
   final File socket;
 
   @override
-  Future<Outcome<WebRequestOutcome>> carryOutWebRequest(Request request) async {
+  Future<Outcome<WebResponse>> carryOutWebRequest(Request request) async {
     try {
       final s = await Socket.connect(
         InternetAddress(socket.path, type: InternetAddressType.unix),
@@ -138,12 +138,12 @@ final class WebDriverSocket implements CarriesOutWebRequests {
       s.add(utf8.encode(jsonEncode(encodeRequest(request))));
       await s.close();
       final answer = await utf8.decoder.bind(s).join();
-      if (answer.isEmpty) return const Refused('web driver: refused caller');
-      return decodeOutcome(jsonDecode(answer), decodeWebRequestOutcome);
+      if (answer.isEmpty) return const Refused('web request driver: refused caller');
+      return decodeOutcome(jsonDecode(answer), decodeWebResponse);
     } on SocketException catch (e) {
-      return Refused('web driver: ${e.message}');
+      return Refused('web request driver: ${e.message}');
     } on FormatException catch (e) {
-      return Refused('web driver: unreadable answer: ${e.message}');
+      return Refused('web request driver: unreadable answer: ${e.message}');
     }
   }
 }

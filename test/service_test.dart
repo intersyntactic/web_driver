@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:is_effects/is_effects.dart';
-import 'package:is_web_driver/service.dart';
+import 'package:is_web_request_driver/service.dart';
 import 'package:test/test.dart';
 
 /// Answers every send with 201 and the request's path as what it made.
@@ -10,12 +10,12 @@ final class Echo implements CarriesOutWebRequests {
   final sent = <Request>[];
 
   @override
-  Future<Outcome<WebRequestOutcome>> carryOutWebRequest(Request request) async {
+  Future<Outcome<WebResponse>> carryOutWebRequest(Request request) async {
     sent.add(request);
     if (request.path.value == '/refuse') {
-      return Ran(WebRequestOutcome(status: 400, refusedBecause: 'BadArgument'));
+      return Ran(WebResponse(status: 400, refusedBecause: 'BadArgument'));
     }
-    return Ran(WebRequestOutcome(status: 201, created: request.path.value));
+    return Ran(WebResponse(status: 201, created: request.path.value));
   }
 }
 
@@ -47,9 +47,9 @@ void main() {
   }
 
   test('carries out a request from its caller, and answers it', () async {
-    final service = await WebDriverService.start(driver, me, socket);
+    final service = await WebRequestDriverService.start(driver, me, socket);
     addTearDown(service.close);
-    final out = await WebDriverSocket(socket).carryOutWebRequest(
+    final out = await WebRequestDriverSocket(socket).carryOutWebRequest(
       Request(
         api,
         method: Method.post,
@@ -59,7 +59,7 @@ void main() {
         body: '{"a":1}',
       ),
     );
-    final sent = (out as Ran<WebRequestOutcome>).output;
+    final sent = (out as Ran<WebResponse>).output;
     expect(sent.status, 201);
     expect(sent.created, '/v3/things');
     expect(sent.refusedBecause, isNull);
@@ -72,11 +72,11 @@ void main() {
   });
 
   test('carries why a destination refused back across the socket', () async {
-    final service = await WebDriverService.start(driver, me, socket);
+    final service = await WebRequestDriverService.start(driver, me, socket);
     addTearDown(service.close);
-    final out = await WebDriverSocket(socket)
+    final out = await WebRequestDriverSocket(socket)
         .carryOutWebRequest(Request(api, path: WebPath.parse('/refuse')!));
-    final sent = (out as Ran<WebRequestOutcome>).output;
+    final sent = (out as Ran<WebResponse>).output;
     expect(sent.status, 400);
     expect(sent.refusedBecause, 'BadArgument');
   });
@@ -94,20 +94,20 @@ void main() {
       s.write('{"ran":{"status":201,"created":"1:abc"}}\n');
       await s.close();
     });
-    final out = await WebDriverSocket(socket).carryOutWebRequest(Request(api));
+    final out = await WebRequestDriverSocket(socket).carryOutWebRequest(Request(api));
     expect((out as Refused).why, contains('unreadable answer'));
   });
 
   test('answers no one but its caller, and carries out nothing', () async {
-    final service = await WebDriverService.start(driver, me + 1, socket);
+    final service = await WebRequestDriverService.start(driver, me + 1, socket);
     addTearDown(service.close);
-    final out = await WebDriverSocket(socket).carryOutWebRequest(Request(api));
+    final out = await WebRequestDriverSocket(socket).carryOutWebRequest(Request(api));
     expect(out, isA<Refused>());
     expect(driver.sent, isEmpty);
   });
 
   test('refuses a request carrying a credential', () async {
-    final service = await WebDriverService.start(driver, me, socket);
+    final service = await WebRequestDriverService.start(driver, me, socket);
     addTearDown(service.close);
     final answer = await raw(
       jsonEncode({
@@ -122,7 +122,7 @@ void main() {
   });
 
   test('refuses what is not a request', () async {
-    final service = await WebDriverService.start(driver, me, socket);
+    final service = await WebRequestDriverService.start(driver, me, socket);
     addTearDown(service.close);
     for (final bad in ['nope', '{}', '{"origin":"ftp://x","method":"get"}']) {
       expect(await raw(bad), contains('refused'));
@@ -133,7 +133,7 @@ void main() {
   // A path cannot be built that names another site, but the socket carries
   // text, which never went through WebPath.
   test('refuses a path that would name another site', () async {
-    final service = await WebDriverService.start(driver, me, socket);
+    final service = await WebRequestDriverService.start(driver, me, socket);
     addTearDown(service.close);
     for (final path in ['@evil.example/x', '//evil.example/x', '/a/../b']) {
       final answer = await raw(
@@ -152,7 +152,7 @@ void main() {
 
   test('says so when no service is listening', () async {
     expect(
-      await WebDriverSocket(socket).carryOutWebRequest(Request(api)),
+      await WebRequestDriverSocket(socket).carryOutWebRequest(Request(api)),
       isA<Refused>(),
     );
   });

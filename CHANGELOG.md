@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0
+
+- Renamed from `is_web_driver`: the package is `is_web_request_driver`, and
+  `WebDriver`, `WebDriverService` and `WebDriverSocket` are
+  `WebRequestDriver`, `WebRequestDriverService` and `WebRequestDriverSocket`.
+  `WebDriver` is already the W3C name for browser automation. The service
+  reads `WEB_REQUEST_DRIVER_SOCKET` and `WEB_REQUEST_DRIVER_CALLER` in place
+  of `WEB_DRIVER_SOCKET` and `WEB_DRIVER_CALLER`.
+- is_effects ^0.9.0: `carryOutWebRequest` returns `Outcome<WebResponse>`
+  (formerly `WebRequestOutcome`), and the socket uses `encodeWebResponse` and
+  `decodeWebResponse`. The JSON is unchanged, so a 0.3.0 driver and a 0.4.0
+  airlock still understand each other.
+
 ## 0.3.0
 
 - is_effects ^0.8.0. The API is unchanged, but it takes and returns

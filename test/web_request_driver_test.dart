@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:is_effects/is_effects.dart';
-import 'package:is_web_driver/is_web_driver.dart';
+import 'package:is_web_request_driver/is_web_request_driver.dart';
 import 'package:test/test.dart';
 
 final api = Origin.parse('https://api.example')!;
@@ -27,7 +27,7 @@ void main() {
   Iterable<Call> tokenCalls() =>
       calls.where((c) => c.url.host == 'auth.example');
 
-  WebDriver driver() => WebDriver(
+  WebRequestDriver driver() => WebRequestDriver(
     {bot: app},
     now: () => clock,
     http: (method, url, headers, body) async {
@@ -63,7 +63,7 @@ void main() {
 
   test('signs with a client-credentials token and reads created', () async {
     final out = await driver().carryOutWebRequest(post(signIn: bot));
-    final sent = (out as Ran<WebRequestOutcome>).output;
+    final sent = (out as Ran<WebResponse>).output;
     expect(sent.status, 201);
     expect(sent.created, '1:abc');
     expect(calls.last.url.toString(), 'https://api.example/v3/things');
@@ -105,12 +105,12 @@ void main() {
 
   test('sends under no sign-in without a credential', () async {
     final out = await driver().carryOutWebRequest(post());
-    expect((out as Ran<WebRequestOutcome>).output.created, isNull);
+    expect((out as Ran<WebResponse>).output.created, isNull);
     expect(calls.single.headers, isNot(contains('authorization')));
   });
 
   test('a refusal from the destination still ran, and made nothing', () async {
-    final d = WebDriver(
+    final d = WebRequestDriver(
       {bot: app},
       now: () => clock,
       http: (_, url, _, _) async => url.host == 'auth.example'
@@ -119,7 +119,7 @@ void main() {
     );
     final sent = ((await d.carryOutWebRequest(
       post(signIn: bot),
-    )) as Ran<WebRequestOutcome>).output;
+    )) as Ran<WebResponse>).output;
     expect(sent.status, 403);
     expect(sent.created, isNull);
   });
@@ -128,7 +128,7 @@ void main() {
     'says why the destination refused, in the outcome and the log',
     () async {
       final log = <String>[];
-      final d = WebDriver(
+      final d = WebRequestDriver(
         {bot: app},
         now: () => clock,
         log: log.add,
@@ -143,7 +143,7 @@ void main() {
       );
       final sent = ((await d.carryOutWebRequest(
         post(signIn: bot),
-      )) as Ran<WebRequestOutcome>).output;
+      )) as Ran<WebResponse>).output;
       // The word the sign-in names, for the record; the rest only logged.
       expect(sent.refusedBecause, 'ConversationNotFound');
       expect(log.single, contains('19:abc@thread'));
@@ -156,7 +156,7 @@ void main() {
 
   test('logs why a token was refused, never the secret', () async {
     final log = <String>[];
-    final d = WebDriver(
+    final d = WebRequestDriver(
       {bot: app},
       log: log.add,
       http: (_, _, _, _) async => (
@@ -175,7 +175,7 @@ void main() {
 
   test('logs nothing when a send succeeds', () async {
     final log = <String>[];
-    final d = WebDriver(
+    final d = WebRequestDriver(
       {bot: app},
       now: () => clock,
       log: log.add,
@@ -188,7 +188,7 @@ void main() {
   });
 
   test('a token the sign-in service refuses is a refusal', () async {
-    final d = WebDriver({
+    final d = WebRequestDriver({
       bot: app,
     }, http: (_, _, _, _) async => (status: 401, body: '{}'));
     final out = await d.carryOutWebRequest(post(signIn: bot));
