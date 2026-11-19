@@ -10,12 +10,12 @@ final class Echo implements CarriesOutWebRequests {
   final sent = <Request>[];
 
   @override
-  Future<Outcome<WebRequestOutcome>> carryOutWebRequest(Request request) async {
+  Future<Outcome<WebResponse>> carryOutWebRequest(Request request) async {
     sent.add(request);
     if (request.path.value == '/refuse') {
-      return Ran(WebRequestOutcome(status: 400, refusedBecause: 'BadArgument'));
+      return Ran(WebResponse(status: 400, refusedBecause: 'BadArgument'));
     }
-    return Ran(WebRequestOutcome(status: 201, created: request.path.value));
+    return Ran(WebResponse(status: 201, created: request.path.value));
   }
 }
 
@@ -59,7 +59,7 @@ void main() {
         body: '{"a":1}',
       ),
     );
-    final sent = (out as Ran<WebRequestOutcome>).output;
+    final sent = (out as Ran<WebResponse>).output;
     expect(sent.status, 201);
     expect(sent.created, '/v3/things');
     expect(sent.refusedBecause, isNull);
@@ -76,7 +76,7 @@ void main() {
     addTearDown(service.close);
     final out = await WebDriverSocket(socket)
         .carryOutWebRequest(Request(api, path: WebPath.parse('/refuse')!));
-    final sent = (out as Ran<WebRequestOutcome>).output;
+    final sent = (out as Ran<WebResponse>).output;
     expect(sent.status, 400);
     expect(sent.refusedBecause, 'BadArgument');
   });

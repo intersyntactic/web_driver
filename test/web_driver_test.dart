@@ -63,7 +63,7 @@ void main() {
 
   test('signs with a client-credentials token and reads created', () async {
     final out = await driver().carryOutWebRequest(post(signIn: bot));
-    final sent = (out as Ran<WebRequestOutcome>).output;
+    final sent = (out as Ran<WebResponse>).output;
     expect(sent.status, 201);
     expect(sent.created, '1:abc');
     expect(calls.last.url.toString(), 'https://api.example/v3/things');
@@ -105,7 +105,7 @@ void main() {
 
   test('sends under no sign-in without a credential', () async {
     final out = await driver().carryOutWebRequest(post());
-    expect((out as Ran<WebRequestOutcome>).output.created, isNull);
+    expect((out as Ran<WebResponse>).output.created, isNull);
     expect(calls.single.headers, isNot(contains('authorization')));
   });
 
@@ -119,7 +119,7 @@ void main() {
     );
     final sent = ((await d.carryOutWebRequest(
       post(signIn: bot),
-    )) as Ran<WebRequestOutcome>).output;
+    )) as Ran<WebResponse>).output;
     expect(sent.status, 403);
     expect(sent.created, isNull);
   });
@@ -143,7 +143,7 @@ void main() {
       );
       final sent = ((await d.carryOutWebRequest(
         post(signIn: bot),
-      )) as Ran<WebRequestOutcome>).output;
+      )) as Ran<WebResponse>).output;
       // The word the sign-in names, for the record; the rest only logged.
       expect(sent.refusedBecause, 'ConversationNotFound');
       expect(log.single, contains('19:abc@thread'));

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- is_effects ^0.9.0: `carryOutWebRequest` returns `Outcome<WebResponse>`
+  (formerly `WebRequestOutcome`), and the socket uses `encodeWebResponse` and
+  `decodeWebResponse`. The JSON is unchanged, so a 0.3.0 driver and a 0.4.0
+  airlock still understand each other.
+
 ## 0.3.0
 
 - is_effects ^0.8.0. The API is unchanged, but it takes and returns

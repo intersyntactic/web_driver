@@ -49,7 +49,7 @@ final class WebDriver implements CarriesOutWebRequests {
   final _tokens = <SignIn, Future<_Token>>{};
 
   @override
-  Future<Outcome<WebRequestOutcome>> carryOutWebRequest(Request request) async {
+  Future<Outcome<WebResponse>> carryOutWebRequest(Request request) async {
     final url = _url(request);
     if (url == null) return Refused('path ${request.path} leaves its origin');
 
@@ -95,7 +95,7 @@ final class WebDriver implements CarriesOutWebRequests {
       );
     }
     return Ran(
-      WebRequestOutcome(
+      WebResponse(
         status: r.status,
         created: ok ? credential?.created?.read(r.body) : null,
         refusedBecause: ok

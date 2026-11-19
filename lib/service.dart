@@ -4,7 +4,7 @@
 ///
 /// A caller connects to the Unix socket, writes one [Request] in is_effects'
 /// JSON ([encodeRequest]) and closes its side; the service answers one line,
-/// the `Outcome<WebRequestOutcome>` ([encodeOutcome]), and closes.
+/// the `Outcome<WebResponse>` ([encodeOutcome]), and closes.
 /// [WebDriverSocket] is that caller.
 ///
 /// Who is calling is read from the socket as the kernel reports it, never
@@ -83,7 +83,7 @@ final class WebDriverService {
         }
         request.add(chunk);
       }
-      final Outcome<WebRequestOutcome> outcome;
+      final Outcome<WebResponse> outcome;
       if (tooLarge) {
         outcome = const Refused('request too large');
       } else {
@@ -106,12 +106,12 @@ final class WebDriverService {
 
   static Future<void> _answer(
     Socket socket,
-    Outcome<WebRequestOutcome> outcome,
+    Outcome<WebResponse> outcome,
   ) async {
     try {
       socket.add(
         utf8.encode(
-          '${jsonEncode(encodeOutcome(outcome, encodeWebRequestOutcome))}\n',
+          '${jsonEncode(encodeOutcome(outcome, encodeWebResponse))}\n',
         ),
       );
       await socket.close();
@@ -129,7 +129,7 @@ final class WebDriverSocket implements CarriesOutWebRequests {
   final File socket;
 
   @override
-  Future<Outcome<WebRequestOutcome>> carryOutWebRequest(Request request) async {
+  Future<Outcome<WebResponse>> carryOutWebRequest(Request request) async {
     try {
       final s = await Socket.connect(
         InternetAddress(socket.path, type: InternetAddressType.unix),
@@ -139,7 +139,7 @@ final class WebDriverSocket implements CarriesOutWebRequests {
       await s.close();
       final answer = await utf8.decoder.bind(s).join();
       if (answer.isEmpty) return const Refused('web driver: refused caller');
-      return decodeOutcome(jsonDecode(answer), decodeWebRequestOutcome);
+      return decodeOutcome(jsonDecode(answer), decodeWebResponse);
     } on SocketException catch (e) {
       return Refused('web driver: ${e.message}');
     } on FormatException catch (e) {

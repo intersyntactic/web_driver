@@ -25,14 +25,14 @@ Teams, Slack or GitHub is a file, not a change to this package.
 3. **The driver signs the request.** It does this the way the sign-in's kind
    says, and keeps any token until five minutes before it expires. Concurrent
    web requests share a single fetch.
-4. **It reads what the destination made.** That becomes `WebRequestOutcome.created`: the
+4. **It reads what the destination made.** That becomes `WebResponse.created`: the
    field the sign-in names, taken from a 2xx JSON reply.
 
 5. **It says why a destination refused.** A failure moves a piece of
    information of its own: why. A `400`'s body names the problem, and a
    refused token's names the cause (`AADSTS7000215` is a wrong secret).
    The record keeps what it's given for good, so it gets **a word, not the
-   body**. `WebRequestOutcome.refusedBecause` is the one field the sign-in names as its
+   body**. `WebResponse.refusedBecause` is the one field the sign-in names as its
    reason, such as `error.code` → `ConversationNotFound`. A refused token's
    `Refused` reason carries OAuth's own `error` code, such as
    `invalid_client`. The whole body goes only to the driver's log, for
@@ -41,7 +41,7 @@ Teams, Slack or GitHub is a file, not a change to this package.
    never logged, and neither is a token service's 200, since that body is
    the token.
 
-`Ran(WebRequestOutcome)` means the request left the home and got a reply, whatever its
+`Ran(WebResponse)` means the request left the home and got a reply, whatever its
 status. `Refused` means nothing reached the destination: an unknown sign-in,
 a foreign origin or path, a token the sign-in service wouldn't issue, or a
 network failure before any reply.
@@ -98,7 +98,7 @@ The service reads who is calling from the socket, as the kernel reports it
 answers no one else: a connection from any other user is closed unanswered,
 and no web request is made. A caller writes one request per connection and closes
 its side. The service answers one line and closes. Both are is_effects' own JSON
-(`encodeRequest`, `encodeOutcome` with `encodeWebRequestOutcome`), shared
+(`encodeRequest`, `encodeOutcome` with `encodeWebResponse`), shared
 with the airlock, so neither side keeps a codec of its own:
 
 ```
