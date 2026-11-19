@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2
+
+- `httpCall` no longer follows redirects. A 3xx comes back as the response's
+  status, so a request goes only to the site it was decided for, and the
+  record shows where it went. `dart:io` followed GET and HEAD redirects, and
+  a POST's 303, to any site, up to five hops, and the record never showed it.
+
 ## 0.4.1
 
 - `WebRequestDriverSocket(socket, checkDriver:)`: an optional `CheckDriver`

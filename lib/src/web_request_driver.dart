@@ -206,7 +206,9 @@ final class _TokenRefused implements Exception {
   String toString() => why;
 }
 
-/// [HttpCall] over `dart:io`, with a ten-second limit on each step.
+/// [HttpCall] over `dart:io`, with a ten-second limit on each step. A
+/// redirect is answered, not followed: following one would send the request
+/// to a site no one decided on, and the record would not show it.
 Future<HttpResult> httpCall(
   String method,
   Uri url,
@@ -215,7 +217,8 @@ Future<HttpResult> httpCall(
 ) async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
   try {
-    final req = await client.openUrl(method, url);
+    final req = await client.openUrl(method, url)
+      ..followRedirects = false;
     headers.forEach(req.headers.set);
     req.add(utf8.encode(body));
     final res = await req.close().timeout(const Duration(seconds: 10));
