@@ -4,7 +4,7 @@ description: >-
   person's sign-ins, holding each sign-in's secret so no tool or record
   ever sees it.
 version: 0.4.1
-repository: https://github.com/intersyntactic/web_driver
+repository: https://github.com/intersyntactic/web_request_driver
 
 environment:
   sdk: ^3.13.0
