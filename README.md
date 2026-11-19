@@ -1,10 +1,10 @@
-# is_web_driver
+# is_web_request_driver
 
-intersyntactic's web driver: the service that `CarriesOutWebRequests` (from
+intersyntactic's web request driver: the service that `CarriesOutWebRequests` (from
 [is_effects](https://github.com/intersyntactic/effects)), making each
 `Request` under one of the person's sign-ins. A tool describes the request
 and names a sign-in such as `cam-teams`, and the airlock decides on it. The
-web driver holds the secret and is the only piece that ever sees it.
+web request driver holds the secret and is the only piece that ever sees it.
 
 It knows nothing about any destination. A sign-in's kind is a way of
 proving who you are, such as OAuth 2 client credentials. Everything a
@@ -88,9 +88,9 @@ It runs as its own OS user, holds only its own secrets, and answers only
 the airlock's user. So the driver runs as a service:
 
 ```
-WEB_DRIVER_SOCKET=/run/intersyntactic-web-driver/web-driver.sock \
-  WEB_DRIVER_CALLER=<the airlock's user> \
-  dart run is_web_driver:service      # CREDENTIALS_DIRECTORY from LoadCredential=
+WEB_REQUEST_DRIVER_SOCKET=/run/intersyntactic-web-driver/web-driver.sock \
+  WEB_REQUEST_DRIVER_CALLER=<the airlock's user> \
+  dart run is_web_request_driver:service      # CREDENTIALS_DIRECTORY from LoadCredential=
 ```
 
 The service reads who is calling from the socket, as the kernel reports it
@@ -109,8 +109,8 @@ with the airlock, so neither side keeps a codec of its own:
 
 A web request that got a 4xx reply still `ran`. A path that would name
 another site can't be built as a `WebPath`, and the socket refuses one
-arriving as text before anything is made. The airlock side is `WebDriverSocket` from
-`package:is_web_driver/service.dart`. It `CarriesOutWebRequests` and holds no secret, so the airlock
+arriving as text before anything is made. The airlock side is `WebRequestDriverSocket` from
+`package:is_web_request_driver/service.dart`. It `CarriesOutWebRequests` and holds no secret, so the airlock
 holds it as it would any other way of carrying out web requests. Each
 sign-in is its own file, so a sign-in that needs a wall of its own can run
 as a second instance of this service with only that file.
