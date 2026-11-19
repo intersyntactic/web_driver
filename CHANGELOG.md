@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1
+
+- `WebRequestDriverSocket(socket, checkDriver:)`: an optional `CheckDriver`
+  that runs on each connected socket before the request is written. A
+  reason it returns becomes `Refused` and the driver never sees the request.
+  The airlock uses it to check which release the kernel says the driver is.
+
 ## 0.4.0
 
 - Renamed from `is_web_driver`: the package is `is_web_request_driver`, and
