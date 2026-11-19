@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:is_web_request_driver/is_web_request_driver.dart';
@@ -51,17 +52,21 @@ void main() {
     ('POST', 303),
   ]) {
     test('answers a $method redirect $status without following it', () async {
-      final r = await httpCall(method, url('?status=$status'), {
-        'authorization': 'Bearer token',
-        'x-tool': 'header',
-      }, '');
+      final r = await httpCall(
+        method,
+        url('?status=$status'),
+        {'authorization': 'Bearer token', 'x-tool': 'header'},
+        '',
+        1 << 20,
+      );
       expect(r.status, status);
       expect(reachedElsewhere, isEmpty);
     });
   }
 
   test('carries out a request that is not redirected', () async {
-    final r = await httpCall('POST', url(''), {}, 'body');
-    expect(r, (status: 200, body: 'answered'));
+    final r = await httpCall('POST', url(''), {}, 'body', 1 << 20);
+    expect(r.status, 200);
+    expect(utf8.decode(r.body!), 'answered');
   });
 }

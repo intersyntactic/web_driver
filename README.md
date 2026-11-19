@@ -40,11 +40,26 @@ Teams, Slack or GitHub is a file, not a change to this package.
    box, and bodies are clipped to 2,000 characters. A successful reply is
    never logged, and neither is a token service's 200, since that body is
    the token.
+6. **It keeps a body only when asked.** `Request.keep` says `none`, `text`
+   or `bytes`, and only a 2xx body is kept. A body over `maxBodyBytes`
+   (16 MiB unless the program sets it) is never read past the limit, and
+   asking to keep one is `Refused`, as is asking for text that isn't UTF-8.
+7. **It follows a redirect only where the sign-in goes.** Only a GET's
+   redirect is followed, since a GET changes nothing; any other method gets
+   the redirect as its answer. The next site must be one in the sign-in's
+   file (with no sign-in, the site the request was decided for), there are
+   at most three hops, and the sign-in's secret goes only to the site the
+   request was decided for, never across a hop to another. Every hop is in
+   `WebResponse.redirects` as its site and path, without the query, since
+   a pre-authenticated download address carries its token there. Anything
+   else is `Refused`, and nothing is sent to the site it pointed at.
 
 `Ran(WebResponse)` means the request left the home and got a reply, whatever its
 status. `Refused` means nothing reached the destination: an unknown sign-in,
 a foreign origin or path, a token the sign-in service wouldn't issue, or a
-network failure before any reply.
+network failure before any reply. The exceptions are a body that can't be
+kept as asked and a GET's redirect that can't be followed: the site
+answered, but nothing it answered is kept.
 
 ## Sign-ins
 

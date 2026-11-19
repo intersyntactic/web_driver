@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:is_effects/is_effects.dart';
 import 'package:is_web_request_driver/is_web_request_driver.dart';
@@ -17,6 +18,9 @@ final app = ClientCredentials(
   refusedBecause: ReplyField.parse('error.code'),
 );
 
+HttpResult answer(int status, String body, [Uri? location]) =>
+    (status: status, body: utf8.encode(body), location: location);
+
 typedef Call = ({String method, Uri url, Map<String, String> headers});
 
 void main() {
@@ -30,20 +34,20 @@ void main() {
   WebRequestDriver driver() => WebRequestDriver(
     {bot: app},
     now: () => clock,
-    http: (method, url, headers, body) async {
+    http: (method, url, headers, body, _) async {
       calls.add((method: method, url: url, headers: headers));
       if (url.host == 'auth.example') {
         expect(body, contains('client_secret=s3cret'));
         expect(body, contains('grant_type=client_credentials'));
-        return (
-          status: 200,
-          body: jsonEncode({
+        return answer(
+          200,
+          jsonEncode({
             'access_token': 'tok${calls.length}',
             'expires_in': 3600,
           }),
         );
       }
-      return (status: 201, body: reply);
+      return answer(201, reply);
     },
   );
 
@@ -113,9 +117,9 @@ void main() {
     final d = WebRequestDriver(
       {bot: app},
       now: () => clock,
-      http: (_, url, _, _) async => url.host == 'auth.example'
-          ? (status: 200, body: '{"access_token":"t","expires_in":3600}')
-          : (status: 403, body: '{"id":"x"}'),
+      http: (_, url, _, _, _) async => url.host == 'auth.example'
+          ? answer(200, '{"access_token":"t","expires_in":3600}')
+          : answer(403, '{"id":"x"}'),
     );
     final sent = ((await d.carryOutWebRequest(
       post(signIn: bot),
@@ -132,13 +136,12 @@ void main() {
         {bot: app},
         now: () => clock,
         log: log.add,
-        http: (_, url, _, _) async => url.host == 'auth.example'
-            ? (status: 200, body: '{"access_token":"t0ken","expires_in":3600}')
-            : (
-                status: 404,
-                body:
-                    '{"error":{"code":"ConversationNotFound",'
-                    '"message":"Conversation 19:abc@thread not found"}}',
+        http: (_, url, _, _, _) async => url.host == 'auth.example'
+            ? answer(200, '{"access_token":"t0ken","expires_in":3600}')
+            : answer(
+                404,
+                '{"error":{"code":"ConversationNotFound",'
+                '"message":"Conversation 19:abc@thread not found"}}',
               ),
       );
       final sent = ((await d.carryOutWebRequest(
@@ -159,10 +162,8 @@ void main() {
     final d = WebRequestDriver(
       {bot: app},
       log: log.add,
-      http: (_, _, _, _) async => (
-        status: 401,
-        body: '{"error":"invalid_client","error_codes":[7000215]}',
-      ),
+      http: (_, _, _, _, _) async =>
+          answer(401, '{"error":"invalid_client","error_codes":[7000215]}'),
     );
     final out = await d.carryOutWebRequest(post(signIn: bot));
     // OAuth's own error code for the record; Microsoft's number only logged.
@@ -179,9 +180,9 @@ void main() {
       {bot: app},
       now: () => clock,
       log: log.add,
-      http: (_, url, _, _) async => url.host == 'auth.example'
-          ? (status: 200, body: '{"access_token":"t0ken","expires_in":3600}')
-          : (status: 201, body: '{"id":"1"}'),
+      http: (_, url, _, _, _) async => url.host == 'auth.example'
+          ? answer(200, '{"access_token":"t0ken","expires_in":3600}')
+          : answer(201, '{"id":"1"}'),
     );
     await d.carryOutWebRequest(post(signIn: bot));
     expect(log, isEmpty);
@@ -190,9 +191,213 @@ void main() {
   test('a token the sign-in service refuses is a refusal', () async {
     final d = WebRequestDriver({
       bot: app,
-    }, http: (_, _, _, _) async => (status: 401, body: '{}'));
+    }, http: (_, _, _, _, _) async => answer(401, '{}'));
     final out = await d.carryOutWebRequest(post(signIn: bot));
     expect((out as Refused).why, isNot(contains('s3cret')));
+  });
+
+  group('bodies and redirects', () {
+    final files = Origin.parse('https://files.example')!;
+    final reader = ClientCredentials(
+      tokenUrl: Uri.parse('https://auth.example/token'),
+      clientId: 'app',
+      secret: 's3cret',
+      scope: 'https://api.example/.default',
+      origins: {api, files},
+    );
+    late Map<String, HttpResult> site;
+    late List<String> log;
+
+    WebRequestDriver reading({int maxBodyBytes = 1 << 20}) => WebRequestDriver(
+      {bot: reader},
+      now: () => clock,
+      log: log.add,
+      maxBodyBytes: maxBodyBytes,
+      http: (method, url, headers, body, maxBytes) async {
+        calls.add((method: method, url: url, headers: headers));
+        if (url.host == 'auth.example') {
+          return answer(200, '{"access_token":"t0ken","expires_in":3600}');
+        }
+        final r = site['$method $url'] ?? answer(404, 'no such page');
+        final read = r.body;
+        return read != null && read.length > maxBytes
+            ? (status: r.status, body: null, location: r.location)
+            : r;
+      },
+    );
+
+    Request get(String path, {BodyToKeep keep = BodyToKeep.text}) => Request(
+      api,
+      path: WebPath.parse(path)!,
+      signIn: bot,
+      headers: {'accept': '*/*'},
+      keep: keep,
+    );
+
+    HttpResult redirect(String to) => answer(302, '', Uri.parse(to));
+
+    Future<WebResponse> ran(Future<Outcome<WebResponse>> out) async =>
+        ((await out) as Ran<WebResponse>).output;
+
+    setUp(() {
+      site = {};
+      log = [];
+    });
+
+    test('keeps a 2xx body as text when asked', () async {
+      site['GET https://api.example/a'] = answer(200, 'héllo');
+      final r = await ran(reading().carryOutWebRequest(get('/a')));
+      expect((r.body as TextBody).text, 'héllo');
+      expect(r.redirects, isEmpty);
+    });
+
+    test('keeps a body as its exact bytes', () async {
+      final zip = Uint8List.fromList([0x50, 0x4b, 0x03, 0x04, 0xff, 0x00]);
+      site['GET https://api.example/a'] = (
+        status: 200,
+        body: zip,
+        location: null,
+      );
+      final r = await ran(
+        reading().carryOutWebRequest(get('/a', keep: BodyToKeep.bytes)),
+      );
+      expect((r.body as BytesBody).bytes, zip);
+    });
+
+    test('keeps nothing unless asked, and nothing of a non-2xx', () async {
+      site['GET https://api.example/a'] = answer(200, 'kept?');
+      site['GET https://api.example/b'] = answer(500, 'error page');
+      final d = reading();
+      final none = await ran(
+        d.carryOutWebRequest(get('/a', keep: BodyToKeep.none)),
+      );
+      final failed = await ran(d.carryOutWebRequest(get('/b')));
+      expect(none.body, isA<NoBody>());
+      expect(failed.body, isA<NoBody>());
+      expect(failed.status, 500);
+    });
+
+    test('refuses text that is not UTF-8', () async {
+      site['GET https://api.example/a'] = (
+        status: 200,
+        body: Uint8List.fromList([0xff, 0xfe]),
+        location: null,
+      );
+      final out = await reading().carryOutWebRequest(get('/a'));
+      expect((out as Refused).why, contains('not UTF-8'));
+    });
+
+    test('refuses to keep a body over the limit', () async {
+      site['GET https://api.example/a'] = answer(200, 'x' * 11);
+      final out = await reading(maxBodyBytes: 10)
+          .carryOutWebRequest(get('/a', keep: BodyToKeep.bytes));
+      expect((out as Refused).why, contains('over 10 bytes'));
+    });
+
+    test('a large body it was not asked to keep still ran', () async {
+      site['POST https://api.example/a'] = answer(201, 'x' * 11);
+      final r = await ran(
+        reading(maxBodyBytes: 10).carryOutWebRequest(
+          Request(
+            api,
+            method: Method.post,
+            path: WebPath.parse('/a')!,
+            signIn: bot,
+          ),
+        ),
+      );
+      expect(r.status, 201);
+      expect(r.body, isA<NoBody>());
+    });
+
+    test(
+      'follows a redirect to a site the sign-in is for, without its secret',
+      () async {
+        site['GET https://api.example/a'] = redirect(
+          'https://files.example/f.docx?tempauth=SECRET',
+        );
+        site['GET https://files.example/f.docx?tempauth=SECRET'] = answer(
+          200,
+          'the file',
+        );
+        final r = await ran(reading().carryOutWebRequest(get('/a')));
+        expect((r.body as TextBody).text, 'the file');
+        expect(r.redirects.map((h) => '$h'), ['https://files.example/f.docx']);
+        final hop = calls.last;
+        expect(hop.url.host, 'files.example');
+        expect(hop.headers, isNot(contains('authorization')));
+        expect(hop.headers['accept'], '*/*');
+      },
+    );
+
+    test('keeps the sign-in on a redirect within its own site', () async {
+      site['GET https://api.example/a'] = redirect('/b');
+      site['GET https://api.example/b'] = answer(200, 'moved');
+      final r = await ran(reading().carryOutWebRequest(get('/a')));
+      expect(r.redirects.map((h) => '$h'), ['https://api.example/b']);
+      expect(calls.last.headers['authorization'], 'Bearer t0ken');
+    });
+
+    test('refuses a redirect to a site the sign-in is not for', () async {
+      site['GET https://api.example/a'] = redirect('https://evil.example/x');
+      final out = await reading().carryOutWebRequest(get('/a'));
+      expect((out as Refused).why, contains('https://evil.example'));
+      expect(calls.where((c) => c.url.host == 'evil.example'), isEmpty);
+    });
+
+    test('with no sign-in, follows only within the site decided', () async {
+      site['GET https://api.example/a'] = redirect('https://files.example/f');
+      final out = await reading().carryOutWebRequest(
+        Request(api, path: WebPath.parse('/a')!),
+      );
+      expect(out, isA<Refused>());
+      expect(calls.where((c) => c.url.host == 'files.example'), isEmpty);
+    });
+
+    test('refuses a fourth redirect', () async {
+      for (final (from, to) in [
+        ('a', 'b'),
+        ('b', 'c'),
+        ('c', 'd'),
+        ('d', 'e'),
+      ]) {
+        site['GET https://api.example/$from'] = redirect('/$to');
+      }
+      site['GET https://api.example/e'] = answer(200, 'too far');
+      final out = await reading().carryOutWebRequest(get('/a'));
+      expect((out as Refused).why, contains('more than 3'));
+    });
+
+    test('answers a redirect to anything but a GET', () async {
+      site['POST https://api.example/a'] = answer(
+        303,
+        '',
+        Uri.parse('https://files.example/f'),
+      );
+      final r = await ran(
+        reading().carryOutWebRequest(
+          Request(
+            api,
+            method: Method.post,
+            path: WebPath.parse('/a')!,
+            signIn: bot,
+          ),
+        ),
+      );
+      expect(r.status, 303);
+      expect(r.redirects, isEmpty);
+      expect(calls.where((c) => c.url.host == 'files.example'), isEmpty);
+    });
+
+    test('never logs where a redirect led beyond its path', () async {
+      site['GET https://api.example/a'] = redirect(
+        'https://files.example/f?tempauth=SECRET',
+      );
+      site['GET https://files.example/f?tempauth=SECRET'] = answer(403, 'no');
+      await reading().carryOutWebRequest(get('/a'));
+      expect(log.single, contains('https://files.example/f'));
+      expect(log.single, isNot(contains('SECRET')));
+    });
   });
 
   group('Credential', () {
