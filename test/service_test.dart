@@ -150,6 +150,33 @@ void main() {
     expect(driver.sent, isEmpty);
   });
 
+  test('a driver the check refuses never sees the request', () async {
+    final service = await WebRequestDriverService.start(driver, me, socket);
+    addTearDown(service.close);
+    final out = await WebRequestDriverSocket(
+      socket,
+      checkDriver: (_) async => 'not the release it should be',
+    ).carryOutWebRequest(Request(api));
+    expect((out as Refused).why, contains('not the release it should be'));
+    expect(driver.sent, isEmpty);
+  });
+
+  test('a driver the check passes carries out the request', () async {
+    final service = await WebRequestDriverService.start(driver, me, socket);
+    addTearDown(service.close);
+    var checked = 0;
+    final out = await WebRequestDriverSocket(
+      socket,
+      checkDriver: (_) async {
+        checked++;
+        return null;
+      },
+    ).carryOutWebRequest(Request(api));
+    expect(out, isA<Ran<WebResponse>>());
+    expect(checked, 1);
+    expect(driver.sent, hasLength(1));
+  });
+
   test('says so when no service is listening', () async {
     expect(
       await WebRequestDriverSocket(socket).carryOutWebRequest(Request(api)),

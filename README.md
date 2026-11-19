@@ -111,6 +111,9 @@ A web request that got a 4xx reply still `ran`. A path that would name
 another site can't be built as a `WebPath`, and the socket refuses one
 arriving as text before anything is made. The airlock side is `WebRequestDriverSocket` from
 `package:is_web_request_driver/service.dart`. It `CarriesOutWebRequests` and holds no secret, so the airlock
-holds it as it would any other way of carrying out web requests. Each
+holds it as it would any other way of carrying out web requests. Its
+optional `checkDriver` looks at the connected driver before the request is
+written, such as which release the kernel says it is, and a reason it
+returns refuses the request unsent. Each
 sign-in is its own file, so a sign-in that needs a wall of its own can run
 as a second instance of this service with only that file.
