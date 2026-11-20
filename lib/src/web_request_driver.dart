@@ -181,9 +181,16 @@ final class WebRequestDriver implements CarriesOutWebRequests {
         (BodyToKeep.bytes, final kept?) => Ran(BytesBody(kept)),
       };
 
+  /// [bytes] as text; `utf8.decode` drops a leading byte order mark, so it
+  /// is put back to keep the exact text.
   static Outcome<ResponseBody> _utf8(Uint8List bytes) {
+    final bom =
+        bytes.length >= 3 &&
+        bytes[0] == 0xef &&
+        bytes[1] == 0xbb &&
+        bytes[2] == 0xbf;
     try {
-      return Ran(TextBody(utf8.decode(bytes)));
+      return Ran(TextBody('${bom ? '\u{feff}' : ''}${utf8.decode(bytes)}'));
     } on FormatException {
       return const Refused('body is not UTF-8');
     }
