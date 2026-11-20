@@ -277,6 +277,16 @@ void main() {
       expect(failed.status, 500);
     });
 
+    test('keeps a leading byte order mark in a text body', () async {
+      site['GET https://api.example/a'] = (
+        status: 200,
+        body: Uint8List.fromList([0xef, 0xbb, 0xbf, ...utf8.encode('hi')]),
+        location: null,
+      );
+      final r = await ran(reading().carryOutWebRequest(get('/a')));
+      expect((r.body as TextBody).text, '\u{feff}hi');
+    });
+
     test('refuses text that is not UTF-8', () async {
       site['GET https://api.example/a'] = (
         status: 200,

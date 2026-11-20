@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0
+
+- is_effects ^0.12.0. The web request wire is unchanged from 0.11.
+- A `TextBody` keeps a leading byte order mark (U+FEFF), as is_effects
+  0.11.1 asks. `utf8.decode` drops it, so 0.5.0 returned the text without
+  it.
+
 ## 0.5.0
 
 - is_effects ^0.11.0. A 2xx response's body comes back as `Request.keep`
