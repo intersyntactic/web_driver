@@ -17,20 +17,21 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:is_effects/is_effects.dart';
-import 'package:is_peer_user_admission/is_peer_user_admission.dart';
+import 'package:is_unix_socket_user_check/is_unix_socket_user_check.dart';
 
-export 'package:is_peer_user_admission/is_peer_user_admission.dart' show UserId;
+export 'package:is_unix_socket_user_check/is_unix_socket_user_check.dart'
+    show UserId;
 
 final class WebRequestDriverService {
   WebRequestDriverService._(
     this._driver,
-    this._admission,
+    this._socketUserCheck,
     this._socket,
     this._server,
   );
 
   final CarriesOutWebRequests _driver;
-  final PeerUserAdmission _admission;
+  final SocketUserCheck _socketUserCheck;
   final File _socket;
   final ServerSocket _server;
 
@@ -46,7 +47,7 @@ final class WebRequestDriverService {
   ) async {
     final service = WebRequestDriverService._(
       driver,
-      PeerUserAdmission.only(caller),
+      SocketUserCheck.only(caller),
       socket,
       await _bind(socket),
     );
@@ -77,7 +78,7 @@ final class WebRequestDriverService {
 
   Future<void> _serve(Socket socket) async {
     try {
-      if (!_admission.admits(socket)) {
+      if (!_socketUserCheck.allows(socket)) {
         socket.destroy();
         return;
       }
