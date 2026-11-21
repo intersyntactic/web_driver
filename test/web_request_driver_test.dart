@@ -174,19 +174,27 @@ void main() {
     expect(log.single, isNot(contains('s3cret')));
   });
 
-  test('logs nothing when a send succeeds', () async {
-    final log = <String>[];
-    final d = WebRequestDriver(
-      {bot: app},
-      now: () => clock,
-      log: log.add,
-      http: (_, url, _, _, _) async => url.host == 'auth.example'
-          ? answer(200, '{"access_token":"t0ken","expires_in":3600}')
-          : answer(201, '{"id":"1"}'),
-    );
-    await d.carryOutWebRequest(post(signIn: bot));
-    expect(log, isEmpty);
-  });
+  test(
+    'logs one line for a send that succeeds, never its path or body',
+    () async {
+      final log = <String>[];
+      final d = WebRequestDriver(
+        {bot: app},
+        now: () => clock,
+        log: log.add,
+        http: (_, url, _, _, _) async => url.host == 'auth.example'
+            ? answer(200, '{"access_token":"t0ken","expires_in":3600}')
+            : answer(201, '{"id":"1","name":"private"}'),
+      );
+      await d.carryOutWebRequest(
+        post(signIn: bot, path: '/v3/conversations/19:abc/activities'),
+      );
+      expect(log.single, 'POST https://api.example as some-bot 201 created 1');
+      expect(log.single, isNot(contains('19:abc')));
+      expect(log.single, isNot(contains('private')));
+      expect(log.single, isNot(contains('t0ken')));
+    },
+  );
 
   test('a token the sign-in service refuses is a refusal', () async {
     final d = WebRequestDriver({

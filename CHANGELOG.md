@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.2
+
+- A 2xx reply logs one line: `POST https://api.example as some-bot 201
+  created 1`. Method, site, sign-in, status and created id; never the path
+  or the body. A request sent straight to the socket, not through the
+  airlock, used to leave no trace when it succeeded.
+
 ## 0.6.1
 
 - A network failure's `Refused` reason no longer names the address it

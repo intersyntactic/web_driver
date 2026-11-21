@@ -50,9 +50,9 @@ final class WebRequestDriver implements CarriesOutWebRequests {
   /// A token reply is a few hundred bytes; anything near this is not one.
   static const _maxTokenBytes = 64 * 1024;
 
-  /// Where a refusal's reason goes when only its body says it: a non-2xx
-  /// reply, or a token the sign-in service would not issue. For whoever runs
-  /// the driver, not the record.
+  /// For whoever runs the driver, not the record: one line per 2xx (site,
+  /// status, created id), and a refusal's reason when only its body says
+  /// it, from a non-2xx reply or a token the sign-in service would not issue.
   final void Function(String line) _log;
 
   static void _silent(String _) {}
@@ -150,6 +150,15 @@ final class WebRequestDriver implements CarriesOutWebRequests {
         '${r.status}: ${text == null ? 'body over $maxBodyBytes bytes' : _clip(text)}',
       );
     }
+    final created = ok && text != null ? credential?.created?.read(text) : null;
+    if (ok) {
+      // Site and created id only: a path holds conversation ids, a body
+      // whatever the site sent.
+      _log(
+        '$method ${request.origin} ${signIn == null ? '' : 'as $signIn '}'
+        '${r.status}${created == null ? '' : ' created $created'}',
+      );
+    }
     final ResponseBody body;
     switch (_keep(ok ? request.keep : BodyToKeep.none, bytes)) {
       case Ran(output: final kept):
@@ -160,7 +169,7 @@ final class WebRequestDriver implements CarriesOutWebRequests {
     return Ran(
       WebResponse(
         status: r.status,
-        created: ok && text != null ? credential?.created?.read(text) : null,
+        created: created,
         refusedBecause: ok || text == null
             ? null
             : _word(credential?.refusedBecause?.read(text)),

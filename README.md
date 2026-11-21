@@ -37,9 +37,10 @@ Teams, Slack or GitHub is a file, not a change to this package.
    `Refused` reason carries OAuth's own `error` code, such as
    `invalid_client`. The whole body goes only to the driver's log, for
    whoever runs it. The service logs to stdout, which is the journal on the
-   box, and bodies are clipped to 2,000 characters. A successful reply is
-   never logged, and neither is a token service's 200, since that body is
-   the token.
+   box, and bodies are clipped to 2,000 characters. A successful reply gets
+   one line: method, site, sign-in, status and created id, never its path
+   (which holds conversation ids) or body. A token service's 200 is never
+   logged, since that body is the token.
 6. **It keeps a body only when asked.** `Request.keep` says `none`, `text`
    or `bytes`, and only a 2xx body is kept. A body over `maxBodyBytes`
    (16 MiB unless the program sets it) is never read past the limit, and
