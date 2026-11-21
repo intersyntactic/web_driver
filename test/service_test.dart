@@ -19,7 +19,10 @@ final class Echo implements CarriesOutWebRequests {
   }
 }
 
-final me = int.parse((Process.runSync('id', ['-u']).stdout as String).trim());
+final myUid = int.parse(
+  (Process.runSync('id', ['-u']).stdout as String).trim(),
+);
+final me = UserId.parse(myUid)!;
 final api = Origin.parse('https://api.example')!;
 
 void main() {
@@ -100,7 +103,11 @@ void main() {
   });
 
   test('answers no one but its caller, and carries out nothing', () async {
-    final service = await WebRequestDriverService.start(driver, me + 1, socket);
+    final service = await WebRequestDriverService.start(
+      driver,
+      UserId.parse(myUid + 1)!,
+      socket,
+    );
     addTearDown(service.close);
     final out = await WebRequestDriverSocket(socket)
         .carryOutWebRequest(Request(api));

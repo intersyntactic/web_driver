@@ -17,17 +17,21 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:is_effects/is_effects.dart';
+import 'package:is_unix_socket_user_check/is_unix_socket_user_check.dart';
+
+export 'package:is_unix_socket_user_check/is_unix_socket_user_check.dart'
+    show UserId;
 
 final class WebRequestDriverService {
   WebRequestDriverService._(
     this._driver,
-    this._caller,
+    this._socketUserCheck,
     this._socket,
     this._server,
   );
 
   final CarriesOutWebRequests _driver;
-  final int _caller;
+  final SocketUserCheck _socketUserCheck;
   final File _socket;
   final ServerSocket _server;
 
@@ -38,12 +42,12 @@ final class WebRequestDriverService {
   /// user [caller] alone. A socket file nothing listens on is replaced.
   static Future<WebRequestDriverService> start(
     CarriesOutWebRequests driver,
-    int caller,
+    UserId caller,
     File socket,
   ) async {
     final service = WebRequestDriverService._(
       driver,
-      caller,
+      SocketUserCheck.only(caller),
       socket,
       await _bind(socket),
     );
@@ -73,9 +77,8 @@ final class WebRequestDriverService {
   }
 
   Future<void> _serve(Socket socket) async {
-    final uid = _peerUid(socket);
     try {
-      if (uid != _caller) {
+      if (!_socketUserCheck.allows(socket)) {
         socket.destroy();
         return;
       }
@@ -165,23 +168,4 @@ final class WebRequestDriverSocket implements CarriesOutWebRequests {
       return Refused('web request driver: unreadable answer: ${e.message}');
     }
   }
-}
-
-/// The user on the other end of [socket], as the kernel reports it: Linux's
-/// `SO_PEERCRED`, macOS's `LOCAL_PEERCRED`. Null where neither is known.
-/// The same as is_journal's writer reads its senders.
-int? _peerUid(Socket socket) {
-  try {
-    if (Platform.isLinux) {
-      final ucred = socket.getRawOption(RawSocketOption(1, 17, Uint8List(12)));
-      return ByteData.sublistView(ucred).getUint32(4, Endian.host);
-    }
-    if (Platform.isMacOS) {
-      final xucred = socket.getRawOption(RawSocketOption(0, 1, Uint8List(76)));
-      return ByteData.sublistView(xucred).getUint32(4, Endian.host);
-    }
-  } on SocketException {
-    return null;
-  }
-  return null;
 }
