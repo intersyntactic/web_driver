@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.1
+
+- A network failure's `Refused` reason no longer names the address it
+  failed at. Dart's `HttpException` prints its uri with the query, so a
+  connection dropped after a redirect put a pre-authenticated download's
+  token into the reason. It now gives the site and the failure's message;
+  the log gets the hop without its query. The same holds for a token
+  request that fails, and for a path that would leave its origin.
+
 ## 0.6.0
 
 - is_effects ^0.12.0. The web request wire is unchanged from 0.11.

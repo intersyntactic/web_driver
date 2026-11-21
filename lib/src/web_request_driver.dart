@@ -67,7 +67,7 @@ final class WebRequestDriver implements CarriesOutWebRequests {
   @override
   Future<Outcome<WebResponse>> carryOutWebRequest(Request request) async {
     final url = _url(request);
-    if (url == null) return Refused('path ${request.path} leaves its origin');
+    if (url == null) return Refused('path leaves ${request.origin}');
 
     final signIn = request.signIn;
     final credential = signIn == null ? null : _signIns[signIn];
@@ -109,7 +109,8 @@ final class WebRequestDriver implements CarriesOutWebRequests {
           maxBodyBytes,
         );
       } on IOException catch (e) {
-        return Refused('${_origin(at)}: $e');
+        _log('$method ${redirects.lastOrNull ?? url}: ${_failure(e)}');
+        return Refused('${_origin(at)}: ${_failure(e)}');
       } on TimeoutException {
         return Refused('${_origin(at)}: timed out');
       }
@@ -196,6 +197,15 @@ final class WebRequestDriver implements CarriesOutWebRequests {
     }
   }
 
+  /// What went wrong, without the address: an [HttpException] prints its
+  /// uri, query and all, and a redirect's query can be a download's token.
+  static String _failure(IOException e) => switch (e) {
+    HttpException(:final message) ||
+    SocketException(:final message) ||
+    TlsException(:final message) => message,
+    _ => '${e.runtimeType}',
+  };
+
   /// [url]'s site, or null when it is not an http(s) one.
   static Origin? _origin(Uri url) => Origin.parse(
     Uri(scheme: url.scheme, host: url.host, port: url.port).toString(),
@@ -238,7 +248,7 @@ final class WebRequestDriver implements CarriesOutWebRequests {
         _maxTokenBytes,
       );
     } on IOException catch (e) {
-      throw _TokenRefused('token: $e');
+      throw _TokenRefused('token: ${_failure(e)}');
     } on TimeoutException {
       throw _TokenRefused('token: timed out');
     }
