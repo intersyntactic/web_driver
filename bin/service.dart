@@ -29,7 +29,10 @@ Future<void> main() async {
     ])
       env[name] ?? _fail('$name is not set'),
   ];
-  final uid = _uidOf(caller) ?? _fail('no user $caller');
+  final number = _uidOf(caller) ?? _fail('no user $caller');
+  final uid =
+      UserId.parse(number) ??
+      _fail('$caller is uid $number, which names no single user');
   final Map<SignIn, Credential> signIns;
   try {
     signIns = await Credential.load(Directory(credentials));

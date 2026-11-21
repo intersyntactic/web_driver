@@ -115,9 +115,11 @@ WEB_REQUEST_DRIVER_SOCKET=/run/intersyntactic-web-driver/web-driver.sock \
 ```
 
 The service reads who is calling from the socket, as the kernel reports it
-(`SO_PEERCRED`), the same way is_journal's writer knows its senders. It
-answers no one else: a connection from any other user is closed unanswered,
-and no web request is made. A caller writes one request per connection and closes
+(`SO_PEERCRED`), through is_peer_user_admission, which every intersyntactic
+service shares. It answers no one else: a connection from any other user,
+or one whose user the kernel can't name, is closed unanswered, and no web
+request is made. The caller is a `UserId`, which can't be `nobody` or the
+overflow uid 65534, so the service won't start configured for one. A caller writes one request per connection and closes
 its side. The service answers one line and closes. Both are is_effects' own JSON
 (`encodeRequest`, `encodeOutcome` with `encodeWebResponse`), shared
 with the airlock, so neither side keeps a codec of its own:

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.0
+
+- The service admits its caller through is_peer_user_admission instead of
+  its own copy of the peer-credentials read. A peer whose user can't be
+  read is denied, as before.
+- **Breaking:** `WebRequestDriverService.start` takes the caller as a
+  `UserId` (exported from `service.dart`), not an `int`. `UserId.parse`
+  refuses 65534, 4294967294 and 4294967295, so the service can't be
+  configured to admit `nobody` or an unmapped user; the service binary
+  exits 78 on one.
+
 ## 0.6.2
 
 - A 2xx reply logs one line: `POST https://api.example as some-bot 201

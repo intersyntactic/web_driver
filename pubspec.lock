@@ -161,6 +161,15 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.1.0"
+  is_peer_user_admission:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: b5a2fa32ca1a278b121282f9e96370142e26196b
+      resolved-ref: b5a2fa32ca1a278b121282f9e96370142e26196b
+      url: "https://github.com/intersyntactic/peer_user_admission"
+    source: git
+    version: "0.1.0"
   lints:
     dependency: "direct dev"
     description:
