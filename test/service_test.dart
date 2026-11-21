@@ -94,14 +94,16 @@ void main() {
       s.write('{"ran":{"status":201,"created":"1:abc"}}\n');
       await s.close();
     });
-    final out = await WebRequestDriverSocket(socket).carryOutWebRequest(Request(api));
+    final out = await WebRequestDriverSocket(socket)
+        .carryOutWebRequest(Request(api));
     expect((out as Refused).why, contains('unreadable answer'));
   });
 
   test('answers no one but its caller, and carries out nothing', () async {
     final service = await WebRequestDriverService.start(driver, me + 1, socket);
     addTearDown(service.close);
-    final out = await WebRequestDriverSocket(socket).carryOutWebRequest(Request(api));
+    final out = await WebRequestDriverSocket(socket)
+        .carryOutWebRequest(Request(api));
     expect(out, isA<Refused>());
     expect(driver.sent, isEmpty);
   });

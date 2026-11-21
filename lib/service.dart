@@ -19,7 +19,12 @@ import 'dart:typed_data';
 import 'package:is_effects/is_effects.dart';
 
 final class WebRequestDriverService {
-  WebRequestDriverService._(this._driver, this._caller, this._socket, this._server);
+  WebRequestDriverService._(
+    this._driver,
+    this._caller,
+    this._socket,
+    this._server,
+  );
 
   final CarriesOutWebRequests _driver;
   final int _caller;
@@ -150,7 +155,9 @@ final class WebRequestDriverSocket implements CarriesOutWebRequests {
       s.add(utf8.encode(jsonEncode(encodeRequest(request))));
       await s.close();
       final answer = await utf8.decoder.bind(s).join();
-      if (answer.isEmpty) return const Refused('web request driver: refused caller');
+      if (answer.isEmpty) {
+        return const Refused('web request driver: refused caller');
+      }
       return decodeOutcome(jsonDecode(answer), decodeWebResponse);
     } on SocketException catch (e) {
       return Refused('web request driver: ${e.message}');
