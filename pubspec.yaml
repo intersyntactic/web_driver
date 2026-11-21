@@ -11,10 +11,7 @@ environment:
 
 dependencies:
   is_effects: ^0.12.0
-  is_unix_socket_user_check:
-    git:
-      url: https://github.com/intersyntactic/unix_socket_user_check
-      ref: e3710c46b09737116b77ec3fca3fe0abbc7a8291
+  is_unix_socket_user_check: ^0.1.0
 
 dev_dependencies:
   lints: ^6.1.0

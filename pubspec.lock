@@ -164,11 +164,10 @@ packages:
   is_unix_socket_user_check:
     dependency: "direct main"
     description:
-      path: "."
-      ref: e3710c46b09737116b77ec3fca3fe0abbc7a8291
-      resolved-ref: e3710c46b09737116b77ec3fca3fe0abbc7a8291
-      url: "https://github.com/intersyntactic/unix_socket_user_check"
-    source: git
+      name: is_unix_socket_user_check
+      sha256: "85e99f8a46d1c6e3d697e57ac62c5b784f257f283c1ff56f627c70926e976b9b"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.1.0"
   lints:
     dependency: "direct dev"
