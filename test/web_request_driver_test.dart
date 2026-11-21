@@ -196,6 +196,26 @@ void main() {
     expect((out as Refused).why, isNot(contains('s3cret')));
   });
 
+  test('a token request that drops never names its address', () async {
+    final d = WebRequestDriver(
+      {
+        bot: ClientCredentials(
+          tokenUrl: Uri.parse('https://auth.example/token?key=SECRET'),
+          clientId: 'app',
+          secret: 's3cret',
+          scope: 'https://api.example/.default',
+          origins: {api},
+        ),
+      },
+      http: (_, url, _, _, _) async =>
+          throw HttpException('Connection reset', uri: url),
+    );
+    final out = await d.carryOutWebRequest(post(signIn: bot));
+    final why = (out as Refused).why;
+    expect(why, contains('Connection reset'));
+    expect(why, isNot(contains('SECRET')));
+  });
+
   group('bodies and redirects', () {
     final files = Origin.parse('https://files.example')!;
     final reader = ClientCredentials(
@@ -206,6 +226,7 @@ void main() {
       origins: {api, files},
     );
     late Map<String, HttpResult> site;
+    late Set<String> drops;
     late List<String> log;
 
     WebRequestDriver reading({int maxBodyBytes = 1 << 20}) => WebRequestDriver(
@@ -217,6 +238,12 @@ void main() {
         calls.add((method: method, url: url, headers: headers));
         if (url.host == 'auth.example') {
           return answer(200, '{"access_token":"t0ken","expires_in":3600}');
+        }
+        if (drops.contains('$method $url')) {
+          throw HttpException(
+            'Connection closed before full header was received',
+            uri: url,
+          );
         }
         final r = site['$method $url'] ?? answer(404, 'no such page');
         final read = r.body;
@@ -241,6 +268,7 @@ void main() {
 
     setUp(() {
       site = {};
+      drops = {};
       log = [];
     });
 
@@ -408,6 +436,23 @@ void main() {
       expect(log.single, contains('https://files.example/f'));
       expect(log.single, isNot(contains('SECRET')));
     });
+
+    test(
+      'a connection dropped after a redirect never names its query',
+      () async {
+        site['GET https://api.example/a'] = redirect(
+          'https://files.example/f?tempauth=SECRET',
+        );
+        drops.add('GET https://files.example/f?tempauth=SECRET');
+        final out = await reading().carryOutWebRequest(get('/a'));
+        final why = (out as Refused).why;
+        expect(why, contains('https://files.example'));
+        expect(why, contains('Connection closed'));
+        expect(why, isNot(contains('SECRET')));
+        expect(log.single, contains('https://files.example/f'));
+        expect(log.single, isNot(contains('SECRET')));
+      },
+    );
   });
 
   group('Credential', () {

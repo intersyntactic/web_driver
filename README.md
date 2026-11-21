@@ -61,6 +61,11 @@ network failure before any reply. The exceptions are a body that can't be
 kept as asked and a GET's redirect that can't be followed: the site
 answered, but nothing it answered is kept.
 
+A `Refused` reason can leave the machine, shown to the person who asked, so
+it names a site but never an address's query or anything the site sent: a
+network failure gives its site and what failed (`Connection closed before
+full header was received`), not the address it failed at.
+
 ## Sign-ins
 
 `Credential.load(directory)` reads every file in `directory`, one per
